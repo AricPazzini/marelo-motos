@@ -1,0 +1,18 @@
+# Banco de dados gerado pelo sistema - nao versionar.
+# A estrutura esta em banco/schema.sql e os dados em banco/seed.sql.
+banco/marelo.db
+banco/marelo.db-wal
+banco/marelo.db-shm
+banco/backups/
+banco/anteriores/
+
+# Sistema operacional / editores
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Node
+node_modules/
+npm-debug.log*

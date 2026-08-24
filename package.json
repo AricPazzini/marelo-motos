@@ -1,0 +1,17 @@
+{
+  "name": "marelo-motos",
+  "version": "1.0.0",
+  "description": "Sistema de Gestao da Marelo Motos - prototipo funcional do Projeto Integrador em ADS II (FATEC)",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node servidor/servidor.js",
+    "recriar-banco": "node ferramentas/recriar-banco.js",
+    "testar": "node --test \"testes/*.test.js\""
+  },
+  "author": "Aric Proenca Pazzini e Lucas Belfort Darantes Medeiros",
+  "license": "MIT"
+}
