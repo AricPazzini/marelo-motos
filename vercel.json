@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node ferramentas/gerar-site.js",
+  "outputDirectory": "site",
+  "framework": null,
+  "cleanUrls": true
+}

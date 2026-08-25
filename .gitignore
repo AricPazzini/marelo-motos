@@ -16,3 +16,6 @@ desktop.ini
 # Node
 node_modules/
 npm-debug.log*
+
+# Versao do GitHub Pages, gerada por ferramentas/gerar-site.js
+site/

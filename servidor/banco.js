@@ -29,6 +29,11 @@ export function gerarHash(senha) {
   return `${salto}:${hash}`;
 }
 
+// Sorteia o identificador da sessao (RNFS-01)
+export function gerarToken() {
+  return randomBytes(24).toString('hex');
+}
+
 export function conferirSenha(senha, armazenado) {
   if (!armazenado || !armazenado.includes(':')) return false;
   const [salto, hash] = armazenado.split(':');

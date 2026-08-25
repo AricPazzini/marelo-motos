@@ -8,21 +8,32 @@
 // Conversa com o servidor
 // ---------------------------------------------------------------------
 export async function pedir(caminho, opcoes = {}) {
+  // Duas formas de responder, com o MESMO resultado:
+  //  - sistema real: chama o servidor por HTTP;
+  //  - versao publicada no GitHub Pages: nao existe servidor, entao as
+  //    mesmas rotas rodam dentro do navegador (ver ferramentas/web).
+  const { status, ok, dados } = globalThis.MARELO_LOCAL
+    ? globalThis.MARELO_LOCAL.chamar(caminho, opcoes)
+    : await viaServidor(caminho, opcoes);
+
+  // Sessao expirada: volta para o login
+  if (status === 401) {
+    window.location.href = './index.html';
+    throw new Error('sessao encerrada');
+  }
+
+  if (!ok) throw new ErroDoServidor(dados.erro || 'Erro inesperado.', status);
+  return dados;
+}
+
+async function viaServidor(caminho, opcoes) {
   const resposta = await fetch(caminho, {
     ...opcoes,
     headers: { 'Content-Type': 'application/json', ...(opcoes.headers || {}) },
     body: opcoes.corpo ? JSON.stringify(opcoes.corpo) : undefined,
   });
-
-  // Sessao expirada: volta para o login
-  if (resposta.status === 401) {
-    window.location.href = '/index.html';
-    throw new Error('sessao encerrada');
-  }
-
   const dados = await resposta.json().catch(() => ({}));
-  if (!resposta.ok) throw new ErroDoServidor(dados.erro || 'Erro inesperado.', resposta.status);
-  return dados;
+  return { status: resposta.status, ok: resposta.ok, dados };
 }
 
 export const api = {

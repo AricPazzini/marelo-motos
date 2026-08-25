@@ -49,7 +49,7 @@ async function iniciar() {
   try {
     sessao = await api.ler('/api/sessao');
   } catch {
-    window.location.href = '/index.html';
+    window.location.href = './index.html';
     return;
   }
 
@@ -161,7 +161,7 @@ export function recarregar() {
 // ---------------------------------------------------------------------
 document.getElementById('botao-sair').addEventListener('click', async () => {
   try { await api.criar('/api/sair', {}); } catch { /* segue para o login mesmo assim */ }
-  window.location.href = '/index.html';
+  window.location.href = './index.html';
 });
 
 iniciar().catch((erro) => {

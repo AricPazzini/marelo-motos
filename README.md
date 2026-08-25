@@ -8,6 +8,28 @@ Aric Proença Pazzini · Lucas Belfort Darantes Medeiros
 
 ---
 
+## 🔗 Abrir o sistema agora, sem instalar nada
+
+**<https://aricpazzini.github.io/marelo-motos/>**
+
+Entre com `marcelo@marelomotos.com.br` e a senha `marelo123` (ou clique em um
+dos atalhos da tela de login).
+
+Essa é a **versão de demonstração**: o sistema roda inteiro dentro do
+navegador, com um banco **SQLite de verdade** (compilado para WebAssembly)
+montado na hora a partir dos mesmos `schema.sql` e `seed.sql` do projeto.
+Pode cadastrar, fechar vendas e mexer à vontade — ao recarregar, tudo volta
+ao estado inicial, e nada é enviado para lugar nenhum.
+
+> **Diferença importante para a apresentação:** nessa versão as permissões
+> são conferidas *no navegador*, então elas demonstram o comportamento mas
+> não são uma barreira de segurança real. No sistema completo (a pasta
+> `servidor/`, que roda no seu computador), quem barra é o servidor — fora
+> do alcance do usuário. As duas versões usam **exatamente o mesmo**
+> `api.js`, `auth.js` e `regras.js`.
+
+---
+
 ## O que é este protótipo
 
 Não é uma maquete de telas: é um sistema que **funciona de verdade**, com
@@ -117,10 +139,30 @@ marelo-motos/
 │     ├─ app.js             menu e navegação
 │     └─ telas/             uma tela por módulo
 │
-├─ ferramentas/             scripts de apoio
+├─ ferramentas/
+│  ├─ gerar-site.js         monta a versão do GitHub Pages
+│  ├─ publicar-site.js      envia essa versão para o GitHub
+│  ├─ recriar-banco.js      volta o banco ao estado inicial
+│  └─ web/                  adaptadores que fazem o servidor rodar
+│                           dentro do navegador (SQLite WebAssembly)
 ├─ testes/                  testes automatizados
 └─ docs/                    documentação técnica
 ```
+
+---
+
+## Publicar
+
+| Onde | Como | Para quê |
+|---|---|---|
+| **GitHub Pages** | `PUBLICAR-SITE.bat` | Demonstração pública, sem servidor. Já no ar. |
+| **Railway** | `railway.json` pronto; conectar o repositório | Sistema completo, com servidor e banco em arquivo que **persiste** |
+| **Vercel** | `vercel.json` pronto; importar o repositório | Publica a mesma demonstração do Pages (a Vercel roda o `gerar-site.js` no build) |
+
+> A Vercel **não** serve para o sistema completo: o disco dela é temporário,
+> e o arquivo do banco seria apagado a cada atualização. Para o sistema com
+> servidor, o caminho é o Railway (disco permanente) ou trocar o SQLite por
+> um banco de nuvem.
 
 ---
 

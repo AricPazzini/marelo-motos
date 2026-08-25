@@ -8,8 +8,10 @@
 //  que o usuario nao pode usar; quem realmente barra e esta camada.
 // =====================================================================
 
-import { randomBytes } from 'node:crypto';
-import { um, executar, conferirSenha } from './banco.js';
+// Tudo o que depende da plataforma (banco, criptografia, sorteio do
+// token) vem de banco.js. Assim este arquivo roda igual no servidor e
+// na versao publicada no GitHub Pages, que usa outro banco.js.
+import { um, executar, conferirSenha, gerarToken } from './banco.js';
 
 const SESSOES = new Map();
 const DURACAO_SESSAO = 8 * 60 * 60 * 1000; // 8 horas
@@ -92,7 +94,7 @@ export function entrar(email, senha) {
     metaMensal: registro.meta_mensal,
   };
 
-  const token = randomBytes(24).toString('hex');
+  const token = gerarToken();
   SESSOES.set(token, { usuario, expiraEm: Date.now() + DURACAO_SESSAO });
   return { token, usuario, permissoes: permissoesDe(usuario) };
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Entrar — Marelo Motos</title>
-<link rel="stylesheet" href="/css/estilo.css">
+<link rel="stylesheet" href="./css/estilo.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23FECC4D'/><text y='23' x='7' font-size='18' font-family='sans-serif' font-weight='bold'>M</text></svg>">
 </head>
 <body>
@@ -89,20 +89,33 @@
     botao.textContent = 'Entrando...';
 
     try {
-      const resposta = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: campoEmail.value, senha: campoSenha.value }),
-      });
-      const dados = await resposta.json();
+      const credenciais = { email: campoEmail.value, senha: campoSenha.value };
 
-      if (!resposta.ok) {
+      // No sistema real o login vai ao servidor; na versão publicada no
+      // GitHub Pages as mesmas rotas rodam dentro do navegador.
+      let ok, dados;
+      if (globalThis.MARELO_LOCAL) {
+        ({ ok, dados } = globalThis.MARELO_LOCAL.chamar('/api/login', {
+          method: 'POST', corpo: credenciais,
+        }));
+        if (ok) sessionStorage.setItem('marelo_email', credenciais.email);
+      } else {
+        const resposta = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credenciais),
+        });
+        ok = resposta.ok;
+        dados = await resposta.json();
+      }
+
+      if (!ok) {
         aviso.textContent = dados.erro || 'Não foi possível entrar.';
         aviso.classList.remove('oculto');
         campoSenha.select();
         return;
       }
-      window.location.href = '/app.html';
+      window.location.href = "./app.html";
     } catch {
       aviso.textContent = 'O servidor não respondeu. Confira se a janela do sistema continua aberta.';
       aviso.classList.remove('oculto');
