@@ -13,5 +13,8 @@
     "testar": "node --test \"testes/*.test.js\""
   },
   "author": "Aric Proenca Pazzini e Lucas Belfort Darantes Medeiros",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "puppeteer-core": "^25.11.0"
+  }
 }
