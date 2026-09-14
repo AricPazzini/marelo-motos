@@ -4,7 +4,7 @@ Protótipo funcional do sistema de gestão da **Marelo Motos**, revenda de
 motocicletas de Itapetininga — SP.
 
 **Projeto Integrador em ADS II — FATEC**
-Aric Proença Pazzini · Lucas Belfort Darantes Medeiros
+Jorge Munir Kasokws Ozi Galvão · Lucas Belfort Darantes Medeiros · Aric Proença Pazzini · Alessandro Tavares Cláudio Junior
 
 ---
 

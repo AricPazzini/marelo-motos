@@ -3,7 +3,7 @@
 --  Estrutura do banco de dados (SQLite)
 --
 --  Projeto Integrador em ADS II - FATEC
---  Aric Proenca Pazzini e Lucas Belfort Darantes Medeiros
+--  Jorge Munir Kasokws Ozi Galvao, Lucas Belfort Darantes Medeiros, Aric Proenca Pazzini e Alessandro Tavares Claudio Junior
 --
 --  Cada tabela abaixo aponta o requisito da Documentacao de Sistema
 --  que ela atende. Nao alterar sem atualizar o documento.
