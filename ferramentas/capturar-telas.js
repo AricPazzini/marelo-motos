@@ -37,6 +37,8 @@ const TELAS = [
   { arquivo: '07-financeiro-resumo', entrar: 'dono',       hash: 'financeiro/resumo',   titulo: 'Financeiro - resumo' },
   { arquivo: '08-financeiro-contratos', entrar: 'dono',    hash: 'financeiro/contratos', titulo: 'Contratos e parcelas' },
   { arquivo: '09-financeiro-cobranca', entrar: 'dono',     hash: 'financeiro/cobranca', titulo: 'Regua de cobranca' },
+  { arquivo: '09b-financeiro-despesas', entrar: 'dono', hash: 'financeiro/despesas', titulo: 'Despesas fixas da loja' },
+  { arquivo: '09c-busca-global',       entrar: 'dono', hash: 'painel',               titulo: 'Busca global', busca: 'Carlos' },
   { arquivo: '10-rh-equipe',        entrar: 'dono',        hash: 'rh/equipe',           titulo: 'RH - equipe' },
   { arquivo: '11-rh-folha',         entrar: 'dono',        hash: 'rh/folha',            titulo: 'Folha e comissoes' },
   { arquivo: '12-rh-ferias',        entrar: 'dono',        hash: 'rh/ferias',           titulo: 'Controle de ferias' },
@@ -101,11 +103,26 @@ try {
       await entrarComo(tela.entrar);
       await pagina.evaluate((h) => { window.location.hash = h; }, tela.hash);
       await esperar(700); // deixa a tela terminar de montar
+      if (tela.busca) {
+        await pagina.type('#busca-global', tela.busca);
+        await esperar(900); // espera a consulta voltar
+      }
     }
 
     const caminho = join(DESTINO, `${tela.arquivo}.png`);
     await pagina.screenshot({ path: caminho, fullPage: true });
     console.log(`  ${tela.arquivo.padEnd(24)} ${tela.titulo}`);
+
+    // Limpa a busca, senao o texto e o painel de resultados sobram nas
+    // telas seguintes e aparecem em figuras onde nao deveriam.
+    if (tela.busca) {
+      await pagina.evaluate(() => {
+        const campo = document.getElementById('busca-global');
+        if (campo) { campo.value = ''; campo.dispatchEvent(new Event('input', { bubbles: true })); }
+        document.body.click();
+      });
+      await esperar(300);
+    }
   }
 } finally {
   await browser.close();
