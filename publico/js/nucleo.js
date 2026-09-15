@@ -265,3 +265,43 @@ export const semPermissao = (mensagem) => `
     <h3>Acesso restrito</h3>
     <p>${escapar(mensagem)}</p>
   </div>`;
+
+// ---------------------------------------------------------------------
+// Exportacao para CSV
+//
+// Abre no Excel e no Google Planilhas sem passo intermediario: separador
+// ponto-e-virgula (o que o Excel em portugues espera) e BOM no inicio,
+// para que acento e cedilha nao apareçam trocados.
+// ---------------------------------------------------------------------
+export function exportarCsv(nomeBase, linhas) {
+  if (!linhas || !linhas.length) {
+    recado('Não há nada para exportar nesta tela.', 'alerta');
+    return;
+  }
+
+  const colunas = Object.keys(linhas[0]);
+  const celula = (valor) => {
+    if (valor === null || valor === undefined) return '';
+    const texto = String(valor);
+    // numero decimal sai com virgula, como o Excel em portugues espera
+    if (typeof valor === 'number') return texto.replace('.', ',');
+    return /[";\n]/.test(texto) ? `"${texto.replaceAll('"', '""')}"` : texto;
+  };
+
+  const conteudo = [
+    colunas.join(';'),
+    ...linhas.map((l) => colunas.map((c) => celula(l[c])).join(';')),
+  ].join('\r\n');
+
+  const arquivo = new Blob(['﻿' + conteudo], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(arquivo);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${nomeBase}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  recado(`${linhas.length} linha(s) exportada(s).`);
+}

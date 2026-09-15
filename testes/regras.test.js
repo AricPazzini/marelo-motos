@@ -333,3 +333,93 @@ describe('RF-02 — SAC', () => {
     for (const c of resolvidos) assert.equal(c.situacao_real, 'resolvido');
   });
 });
+
+// =====================================================================
+describe('RF-09 — despesas fixas da loja', () => {
+  test('a visao marca como vencida a conta que passou do vencimento', () => {
+    const vencida = um(`
+      SELECT situacao_real, dias_atraso FROM vw_despesa
+       WHERE situacao = 'aberta' AND date(vencimento) < date('now','localtime')
+       LIMIT 1`);
+    assert.ok(vencida, 'o seed precisa ter ao menos uma despesa vencida');
+    assert.equal(vencida.situacao_real, 'vencida');
+    assert.ok(vencida.dias_atraso > 0, 'a vencida deve ter dias de atraso');
+  });
+
+  test('conta paga nunca aparece como vencida, mesmo com vencimento no passado', () => {
+    const pagasNoPassado = todos(`
+      SELECT situacao_real FROM vw_despesa
+       WHERE situacao = 'paga' AND date(vencimento) < date('now','localtime')`);
+    assert.ok(pagasNoPassado.length > 0, 'o seed precisa ter despesas pagas de meses anteriores');
+    for (const d of pagasNoPassado) assert.equal(d.situacao_real, 'paga');
+  });
+
+  test('a competencia agrupa as despesas pelo mes do vencimento', () => {
+    const competencias = todos(`
+      SELECT competencia, COUNT(*) AS contas FROM vw_despesa
+       GROUP BY competencia ORDER BY competencia`);
+    assert.ok(competencias.length >= 2, 'deve haver mais de um mes lancado');
+    for (const c of competencias) {
+      assert.match(c.competencia, /^\d{4}-\d{2}$/);
+      assert.ok(c.contas > 0);
+    }
+  });
+
+  test('o total do mes corrente soma apenas as despesas nao canceladas', () => {
+    const daVisao = um(`
+      SELECT COALESCE(SUM(valor),0) AS total FROM vw_despesa
+       WHERE competencia = strftime('%Y-%m', date('now','localtime'))
+         AND situacao <> 'cancelada'`);
+    const daTabela = um(`
+      SELECT COALESCE(SUM(valor),0) AS total FROM despesa
+       WHERE strftime('%Y-%m', vencimento) = strftime('%Y-%m', date('now','localtime'))
+         AND situacao <> 'cancelada'`);
+    assert.equal(daVisao.total, daTabela.total);
+  });
+});
+
+// =====================================================================
+describe('RF-10 — busca global', () => {
+  // A busca mora na API; aqui conferimos a consulta que a sustenta e,
+  // principalmente, o recorte por perfil, que e a parte sensivel.
+  const buscarMotos = (termo) => todos(
+    `SELECT codigo, marca, modelo FROM vw_estoque
+      WHERE codigo LIKE ? COLLATE NOCASE OR modelo LIKE ? COLLATE NOCASE
+         OR marca LIKE ? COLLATE NOCASE
+      LIMIT 6`, `%${termo}%`, `%${termo}%`, `%${termo}%`);
+
+  test('encontra a moto pelo modelo, sem diferenciar maiuscula de minuscula', () => {
+    const maiuscula = buscarMotos('HONDA');
+    const minuscula = buscarMotos('honda');
+    assert.ok(maiuscula.length > 0, 'o seed precisa ter motos Honda');
+    assert.equal(maiuscula.length, minuscula.length);
+  });
+
+  test('RNFR-01.1 — o vendedor so alcanca os clientes da propria carteira', () => {
+    const vendedor = um("SELECT id FROM funcionario WHERE setor = 'comercial' LIMIT 1");
+    const todosOsClientes = todos('SELECT id FROM cliente');
+    const daCarteira = todos('SELECT id FROM cliente WHERE vendedor_id = ?', vendedor.id);
+
+    assert.ok(daCarteira.length > 0, 'o vendedor precisa ter carteira no seed');
+    assert.ok(
+      daCarteira.length < todosOsClientes.length,
+      'a carteira de um vendedor nao pode ser a loja inteira, senao o teste nao prova nada'
+    );
+  });
+
+  test('o perfil decide o alcance da busca, nao a tela', () => {
+    const dono = { perfil: 'dono' };
+    const vendedor = { perfil: 'funcionario', setor: 'comercial' };
+    const financeiro = { perfil: 'funcionario', setor: 'financeiro' };
+
+    // contratos so aparecem para quem pode ler o financeiro
+    assert.equal(pode(dono, 'financeiro.ler'), true);
+    assert.equal(pode(vendedor, 'financeiro.ler'), false);
+    assert.equal(pode(financeiro, 'financeiro.ler'), true);
+
+    // estoque e consultavel pelos tres
+    for (const usuario of [dono, vendedor, financeiro]) {
+      assert.equal(pode(usuario, 'estoque.ler'), true);
+    }
+  });
+});

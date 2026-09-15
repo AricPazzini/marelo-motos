@@ -105,18 +105,31 @@ export async function montar(area) {
         <h3>Resumo financeiro do mês</h3>
         <ul class="lista-simples">
           <li><span>Entradas (vendas do mês)</span><b>${dinheiro(r.entradas)}</b></li>
-          <li><span>Compra de veículos</span><b>${dinheiro(r.compraVeiculos)}</b></li>
+          <li><span>Custo das motos vendidas</span><b>${dinheiro(r.custoVendido)}</b></li>
+          <li>
+            <span>Margem bruta das vendas</span>
+            <b class="${r.entradas - r.custoVendido >= 0 ? 'up' : 'down'}">
+              ${dinheiro(r.entradas - r.custoVendido)}
+            </b>
+          </li>
           <li><span>Folha de pagamento</span><b>${dinheiro(r.folha)}</b></li>
           <li><span>Comissões dos vendedores</span><b>${dinheiro(r.comissoes)}</b></li>
+          <li><span>Despesas fixas da loja</span><b>${dinheiro(r.despesasFixas)}</b></li>
           <li>
             <span><b>Resultado</b></span>
             <b class="${r.resultado >= 0 ? 'up' : 'down'}">${dinheiro(r.resultado)}</b>
           </li>
         </ul>
         <p style="font-size:11.5px;color:var(--texto-fraco);margin-top:14px;line-height:1.6">
-          O resultado considera apenas o que já está registrado no sistema.
-          Despesas fixas da loja (aluguel, energia, impostos) ainda não fazem
-          parte do escopo — item a confirmar com o cliente.
+          <b>Mês em curso — dia ${new Date().getDate()} de
+          ${new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()}.</b>
+          As vendas entram conforme acontecem, mas a folha e as
+          ${numero(r.contasFixas)} conta(s) fixa(s) já estão lançadas por inteiro:
+          é normal o resultado só virar positivo na segunda metade do mês.
+          O custo considerado é o das motos <b>vendidas</b>; as
+          ${numero(r.motosCompradas)} moto(s) que entraram no pátio
+          (${dinheiro(r.compraVeiculos)}) são investimento em estoque e só viram
+          custo quando saem.
         </p>
       </div>
     </div>

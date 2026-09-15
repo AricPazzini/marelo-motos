@@ -7,7 +7,7 @@
 
 import {
   api, dinheiro, numero, tabela, etiqueta, rotulo, escapar, data,
-  janela, lerCampos, recado, confirmar, mostrarErroNaJanela,
+  janela, lerCampos, recado, confirmar, mostrarErroNaJanela, exportarCsv,
 } from '../nucleo.js';
 import { recarregar } from '../app.js';
 
@@ -378,6 +378,7 @@ async function montarClientes(area, contexto) {
 
     <div class="barra-acoes">
       ${podeEditar ? '<button class="btn" id="novo-cliente">+ Novo cliente</button>' : ''}
+      <button class="btn linha" id="exportar-clientes">Exportar CSV</button>
       <input class="filtro" id="busca" placeholder="Buscar por nome, CPF ou telefone…" style="min-width:280px">
       <span class="espaco"></span>
       <span style="font-size:12px;color:var(--texto-fraco)">${clientes.length} cliente(s)</span>
@@ -396,14 +397,33 @@ async function montarClientes(area, contexto) {
         { titulo: 'Vendedor', valor: (l) => escapar(l.vendedor_nome || '—') },
         { titulo: 'Negociações', alinha: 'direita', valor: (l) => numero(l.negociacoes) },
         { titulo: 'Compras', alinha: 'direita', valor: (l) => numero(l.compras) },
+        {
+          titulo: '',
+          valor: (l) => podeEditar
+            ? `<button class="btn linha pequeno" data-editar="${l.id}">Editar</button>`
+            : '',
+        },
       ],
       linhas: lista,
       vazio: 'Nenhum cliente encontrado.',
     });
+
+    for (const botao of document.querySelectorAll('[data-editar]')) {
+      const cliente = clientes.find((c) => String(c.id) === botao.dataset.editar);
+      botao.addEventListener('click', () => abrirEdicaoCliente(cliente));
+    }
   };
   desenhar(clientes);
 
   document.getElementById('novo-cliente')?.addEventListener('click', abrirNovoCliente);
+
+  document.getElementById('exportar-clientes')?.addEventListener('click', () => {
+    exportarCsv('clientes-marelo-motos', clientes.map((c) => ({
+      Nome: c.nome, CPF: c.cpf, Telefone: c.telefone, Email: c.email || '',
+      Cidade: c.cidade || '', Origem: c.origem || '', Vendedor: c.vendedor_nome || '',
+      Negociacoes: c.negociacoes, Compras: c.compras,
+    })));
+  });
   document.getElementById('busca').addEventListener('input', (e) => {
     const termo = e.target.value.toLowerCase();
     desenhar(clientes.filter((c) =>
@@ -572,6 +592,71 @@ async function abrirNovoChamado() {
             responsavelId: Number(dados.responsavelId),
           });
           recado('Chamado aberto.');
+          recarregar();
+        },
+      },
+    ],
+  });
+}
+
+// Edicao do cadastro (RF-01). A rota PUT ja existia no servidor; faltava
+// o caminho pela tela — o Estoque ja tinha "Editar" e Clientes nao.
+function abrirEdicaoCliente(cliente) {
+  const selecionado = (valor) => (cliente.origem === valor ? ' selected' : '');
+  janela({
+    titulo: `Editar ${cliente.nome}`,
+    descricao: 'O CPF não muda: ele identifica o cliente nos contratos já emitidos.',
+    corpo: `
+      <div class="campo">
+        <label for="e-nome">Nome completo</label>
+        <input name="nome" id="e-nome" value="${escapar(cliente.nome)}">
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="e-cpf">CPF</label>
+          <input id="e-cpf" value="${escapar(cliente.cpf)}" disabled>
+          <p class="dica">Para corrigir o CPF, procure o proprietário.</p>
+        </div>
+        <div class="campo">
+          <label for="e-telefone">Telefone com DDD</label>
+          <input name="telefone" id="e-telefone" value="${escapar(cliente.telefone)}" inputmode="tel">
+        </div>
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="e-cidade">Cidade</label>
+          <input name="cidade" id="e-cidade" value="${escapar(cliente.cidade || '')}">
+        </div>
+        <div class="campo">
+          <label for="e-origem">Como chegou até a loja</label>
+          <select name="origem" id="e-origem">
+            <option${selecionado('Loja')}>Loja</option>
+            <option${selecionado('Instagram')}>Instagram</option>
+            <option${selecionado('Indicacao')}>Indicacao</option>
+            <option${selecionado('Site')}>Site</option>
+            <option${selecionado('Outro')}>Outro</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="campo">
+        <label for="e-email">E-mail</label>
+        <input type="email" name="email" id="e-email" value="${escapar(cliente.email || '')}">
+      </div>
+
+      <div class="campo">
+        <label for="e-observacao">Observação</label>
+        <input name="observacao" id="e-observacao" value="${escapar(cliente.observacao || '')}">
+      </div>`,
+    acoes: [
+      { texto: 'Cancelar', estilo: 'linha' },
+      {
+        texto: 'Salvar alterações',
+        aoClicar: async ({ fundo }) => {
+          await api.alterar(`/api/clientes/${cliente.id}`, lerCampos(fundo));
+          recado('Cadastro atualizado.');
           recarregar();
         },
       },

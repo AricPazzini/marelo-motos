@@ -131,6 +131,46 @@ a{color:var(--azul)}
 .pilula{background:var(--amarelo-fraco);color:var(--amarelo-escuro);padding:5px 12px;border-radius:14px;font-weight:600;white-space:nowrap}
 .pilula.cinza{background:var(--fundo);color:var(--texto-fraco);font-weight:500;border:1px solid var(--linha)}
 
+/* ===== BUSCA GLOBAL (RF-10) ===== */
+/* Texto que só o leitor de tela anuncia (RNFS-07) */
+.apenas-leitor{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
+.busca{position:relative;flex:1;max-width:420px;min-width:0}
+.busca input{
+  width:100%;border:1px solid var(--linha);border-radius:9px;
+  padding:9px 13px;font-size:13px;font-family:inherit;
+  background:var(--fundo);color:var(--texto);
+}
+.busca input::placeholder{color:var(--texto-fraco)}
+.busca input:focus{
+  outline:none;border-color:var(--amarelo-escuro);background:var(--branco);
+  box-shadow:0 0 0 3px var(--amarelo-fraco);
+}
+.busca-painel{
+  position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:40;
+  background:var(--branco);border:1px solid var(--linha);border-radius:12px;
+  box-shadow:0 8px 28px rgba(0,0,0,.12);max-height:min(460px,70vh);overflow-y:auto;
+}
+.busca-grupo{padding:10px 0 4px}
+.busca-grupo + .busca-grupo{border-top:1px solid var(--linha-fraca)}
+.busca-grupo h4{
+  font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--texto-fraco);padding:0 14px 6px;display:flex;gap:6px;align-items:center;
+}
+.busca-item{
+  display:block;width:100%;text-align:left;padding:8px 14px;
+  font-family:inherit;font-size:13px;line-height:1.35;border-left:2px solid transparent;
+}
+.busca-item:hover,.busca-item:focus,.busca-item.ativo{
+  background:var(--amarelo-fraco);border-left-color:var(--amarelo);outline:none;
+}
+.busca-item .bt{font-weight:600;color:var(--texto);display:block}
+.busca-item .bd{font-size:11.5px;color:var(--texto-fraco);display:block;margin-top:1px}
+.busca-item mark{background:var(--amarelo);color:inherit;padding:0 1px;border-radius:2px}
+.busca-vazio{padding:18px 14px;font-size:12.5px;color:var(--texto-fraco);text-align:center}
+
 .abas{display:flex;gap:26px;padding:0 30px;background:var(--branco);border-bottom:1px solid var(--linha);overflow-x:auto}
 .aba{
   font-size:13px;font-weight:500;color:var(--texto-fraco);padding:13px 0 11px;
@@ -301,6 +341,7 @@ tbody tr:hover td{background:#FCFBF8}
   .rodape-side button{width:auto}
   .pagina,.topo,.abas,.faixa{padding-left:16px;padding-right:16px}
   .topo{flex-wrap:wrap;padding-top:10px;padding-bottom:10px}
+  .busca{order:3;max-width:none;flex-basis:100%}
   .g4{grid-template-columns:1fr 1fr}
   .funil{grid-template-columns:1fr}
   .coluna{min-height:auto}

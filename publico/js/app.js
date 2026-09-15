@@ -157,6 +157,100 @@ export function recarregar() {
 }
 
 // ---------------------------------------------------------------------
+// Busca global (RF-10)
+//
+// Um campo só, atravessando clientes, estoque, contratos e SAC. Quem
+// decide o que cada perfil encontra é o servidor: a tela apenas desenha
+// o que voltou.
+// ---------------------------------------------------------------------
+const elBusca = document.getElementById('busca-global');
+const elResultados = document.getElementById('busca-resultados');
+let horaDaBusca;
+let buscaAtual = 0;
+
+function fecharBusca() {
+  elResultados.classList.add('oculto');
+  elResultados.innerHTML = '';
+  elBusca.setAttribute('aria-expanded', 'false');
+}
+
+function realcar(texto, termo) {
+  const alvo = termo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escapar(texto).replace(new RegExp(alvo, 'gi'), (achado) => `<mark>${achado}</mark>`);
+}
+
+async function buscar(termo) {
+  const meuTurno = ++buscaAtual;
+  let dados;
+  try {
+    dados = await api.ler(`/api/busca?q=${encodeURIComponent(termo)}`);
+  } catch {
+    return; // a busca é conveniência: se falhar, não atrapalha o resto da tela
+  }
+  if (meuTurno !== buscaAtual) return; // resposta fora de ordem, descarta
+
+  if (!dados.total) {
+    elResultados.innerHTML =
+      `<p class="busca-vazio">Nada encontrado para “${escapar(termo)}”.</p>`;
+  } else {
+    elResultados.innerHTML = dados.grupos.map((g) => `
+      <div class="busca-grupo">
+        <h4><span aria-hidden="true">${g.icone}</span> ${escapar(g.modulo)}</h4>
+        ${g.itens.map((i) => `
+          <button class="busca-item" role="option" data-destino="${g.destino}">
+            <span class="bt">${realcar(i.titulo, termo)}</span>
+            <span class="bd">${realcar(i.detalhe || '', termo)}</span>
+          </button>`).join('')}
+      </div>`).join('');
+
+    for (const item of elResultados.querySelectorAll('.busca-item')) {
+      item.addEventListener('click', () => {
+        window.location.hash = item.dataset.destino;
+        elBusca.value = '';
+        fecharBusca();
+      });
+    }
+  }
+
+  elResultados.classList.remove('oculto');
+  elBusca.setAttribute('aria-expanded', 'true');
+}
+
+elBusca.addEventListener('input', () => {
+  const termo = elBusca.value.trim();
+  clearTimeout(horaDaBusca);
+  if (termo.length < 2) { fecharBusca(); return; }
+  horaDaBusca = setTimeout(() => buscar(termo), 220);
+});
+
+// Teclado: setas percorrem, Enter abre, Esc fecha (RNFS-07)
+elBusca.addEventListener('keydown', (evento) => {
+  if (evento.key === 'Escape') { elBusca.value = ''; fecharBusca(); return; }
+  const itens = [...elResultados.querySelectorAll('.busca-item')];
+  if (!itens.length) return;
+
+  if (evento.key === 'ArrowDown' || evento.key === 'ArrowUp') {
+    evento.preventDefault();
+    const atual = itens.findIndex((i) => i.classList.contains('ativo'));
+    const proximo = evento.key === 'ArrowDown'
+      ? (atual + 1) % itens.length
+      : (atual <= 0 ? itens.length - 1 : atual - 1);
+    itens.forEach((i) => i.classList.remove('ativo'));
+    itens[proximo].classList.add('ativo');
+    itens[proximo].scrollIntoView({ block: 'nearest' });
+  }
+
+  if (evento.key === 'Enter') {
+    evento.preventDefault();
+    (itens.find((i) => i.classList.contains('ativo')) || itens[0]).click();
+  }
+});
+
+document.addEventListener('click', (evento) => {
+  if (!evento.target.closest('.busca')) fecharBusca();
+});
+
+// ---------------------------------------------------------------------
 // Sair
 // ---------------------------------------------------------------------
 document.getElementById('botao-sair').addEventListener('click', async () => {

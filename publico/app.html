@@ -34,6 +34,21 @@
   <main class="conteudo">
     <header class="topo">
       <div class="modulo" id="modulo-atual">Carregando…</div>
+
+      <!-- Busca global (RF-10): atravessa clientes, estoque, contratos e SAC -->
+      <div class="busca" role="search">
+        <label for="busca-global" class="apenas-leitor">Buscar no sistema</label>
+        <input type="search" id="busca-global" autocomplete="off" spellcheck="false"
+               placeholder="Buscar cliente, moto, placa, contrato…"
+               aria-describedby="busca-dica" aria-expanded="false"
+               aria-controls="busca-resultados">
+        <span id="busca-dica" class="apenas-leitor">
+          Digite ao menos dois caracteres. Use as setas para percorrer os resultados.
+        </span>
+        <div class="busca-painel oculto" id="busca-resultados" role="listbox"
+             aria-label="Resultados da busca"></div>
+      </div>
+
       <div class="acoes">
         <span class="pilula" id="pilula-perfil">—</span>
         <span class="pilula cinza" id="pilula-loja">—</span>

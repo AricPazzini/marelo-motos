@@ -191,6 +191,29 @@ CREATE TABLE IF NOT EXISTS chamado (
 );
 
 -- ---------------------------------------------------------------------
+-- DESPESAS FIXAS DA LOJA  (RF-09)
+--
+-- Sem elas o resumo do mes mostrava so as entradas, a compra de veiculos
+-- e a folha: faltava o custo de manter a loja aberta (aluguel, energia,
+-- impostos), e por isso o resultado nunca batia com o que o dono ve.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS despesa (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  descricao      TEXT    NOT NULL,
+  categoria      TEXT    NOT NULL DEFAULT 'outros'
+                 CHECK (categoria IN ('aluguel','energia','agua','internet','telefone',
+                                      'impostos','contabilidade','marketing','manutencao',
+                                      'seguro','outros')),
+  valor          REAL    NOT NULL,
+  vencimento     TEXT    NOT NULL,           -- AAAA-MM-DD
+  data_pagamento TEXT,
+  recorrente     INTEGER NOT NULL DEFAULT 0, -- 1 = repete todo mes
+  observacao     TEXT,
+  situacao       TEXT    NOT NULL DEFAULT 'aberta'
+                 CHECK (situacao IN ('aberta','paga','cancelada'))
+);
+
+-- ---------------------------------------------------------------------
 -- PARAMETROS DA LOJA  (RNFR-07.3, RNFR-03.2, RF-05)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS parametro (
@@ -210,6 +233,12 @@ CREATE INDEX IF NOT EXISTS ix_parcela_vencimento  ON parcela (vencimento, situac
 CREATE INDEX IF NOT EXISTS ix_parcela_contrato    ON parcela (contrato_id);
 CREATE INDEX IF NOT EXISTS ix_contrato_emissao    ON contrato (data_emissao);
 CREATE INDEX IF NOT EXISTS ix_chamado_situacao    ON chamado (situacao);
+CREATE INDEX IF NOT EXISTS ix_despesa_vencimento  ON despesa (vencimento, situacao);
+
+-- Busca global (RF-10): indices por texto, para a consulta do topo
+CREATE INDEX IF NOT EXISTS ix_cliente_nome        ON cliente (nome);
+CREATE INDEX IF NOT EXISTS ix_moto_codigo         ON moto (codigo);
+CREATE INDEX IF NOT EXISTS ix_contrato_numero     ON contrato (numero);
 
 -- =====================================================================
 --  VISOES
@@ -293,3 +322,19 @@ WHERE c.situacao <> 'cancelado'
         WHERE p.contrato_id = c.id AND p.numero = 1 AND p.situacao = 'paga'
       )
 GROUP BY c.vendedor_id, competencia;
+
+-- Despesas fixas da loja (RF-09). Assim como nas parcelas, e a visao que
+-- diz se a conta esta vencida, comparando o vencimento com a data de hoje.
+DROP VIEW IF EXISTS vw_despesa;
+CREATE VIEW vw_despesa AS
+SELECT
+  d.*,
+  CASE
+    WHEN d.situacao = 'paga'      THEN 'paga'
+    WHEN d.situacao = 'cancelada' THEN 'cancelada'
+    WHEN date(d.vencimento) < date('now','localtime') THEN 'vencida'
+    ELSE 'aberta'
+  END AS situacao_real,
+  CAST(julianday(date('now','localtime')) - julianday(d.vencimento) AS INTEGER) AS dias_atraso,
+  strftime('%Y-%m', d.vencimento) AS competencia
+FROM despesa d;

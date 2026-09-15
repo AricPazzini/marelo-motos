@@ -260,3 +260,54 @@ INSERT INTO chamado (numero, cliente_id, moto_id, assunto, descricao, responsave
   ('#1042', 1, (SELECT id FROM moto WHERE codigo='MM-0198'), 'Emplacamento atrasado',     'Documento nao retornou do despachante.',                    3, date('now','localtime','-7 days'),  date('now','localtime','-1 days'),  'andamento', NULL),
   ('#1043',12, (SELECT id FROM moto WHERE codigo='MM-0213'), 'Barulho no freio traseiro', 'Cliente relatou ruido; agendada avaliacao na oficina.',      7, date('now','localtime','-4 days'),  date('now','localtime','-4 days'),  'andamento', NULL),
   ('#1044',14, (SELECT id FROM moto WHERE codigo='MM-0222'), 'Troca de titularidade',     'Orientacao sobre transferencia no Detran.',                  9, date('now','localtime','-2 days'),  date('now','localtime','-2 days'),  'andamento', NULL);
+
+-- ---------------------------------------------------------------------
+-- DESPESAS FIXAS DA LOJA  (RF-09)
+--
+-- Tres competencias: os dois meses anteriores ja quitados e o mes
+-- corrente em aberto, com uma conta vencida de proposito para a tela de
+-- despesas ter o que mostrar no dia da apresentacao.
+-- ---------------------------------------------------------------------
+
+-- Mes retrasado e mes passado: tudo pago
+INSERT INTO despesa (descricao, categoria, valor, vencimento, data_pagamento, recorrente, situacao)
+SELECT d.descricao, d.categoria, d.valor,
+       date('now','localtime','start of month', m.meses || ' months', '+' || d.dia || ' days'),
+       date('now','localtime','start of month', m.meses || ' months', '+' || d.dia || ' days'),
+       1, 'paga'
+FROM (
+  SELECT 'Aluguel do imovel'        AS descricao, 'aluguel'        AS categoria, 6800.0 AS valor, 4 AS dia UNION ALL
+  SELECT 'Energia eletrica',            'energia',        1450.0, 9  UNION ALL
+  SELECT 'Agua e esgoto',               'agua',            280.0, 9  UNION ALL
+  SELECT 'Internet e telefonia',        'internet',        399.0, 14 UNION ALL
+  SELECT 'Honorarios de contabilidade', 'contabilidade',  1200.0, 4  UNION ALL
+  SELECT 'Simples Nacional',            'impostos',       4900.0, 19 UNION ALL
+  SELECT 'Seguro do estabelecimento',   'seguro',          540.0, 24 UNION ALL
+  SELECT 'Trafego pago e midias',       'marketing',      1500.0, 9
+) d
+CROSS JOIN (SELECT '-2' AS meses UNION ALL SELECT '-1') m;
+
+-- Mes corrente: aluguel e contabilidade ja pagos, o resto em aberto
+INSERT INTO despesa (descricao, categoria, valor, vencimento, data_pagamento, recorrente, situacao)
+SELECT d.descricao, d.categoria, d.valor,
+       date('now','localtime','start of month','+' || d.dia || ' days'),
+       CASE WHEN d.pago = 1
+            THEN date('now','localtime','start of month','+' || d.dia || ' days')
+            ELSE NULL END,
+       1,
+       CASE WHEN d.pago = 1 THEN 'paga' ELSE 'aberta' END
+FROM (
+  SELECT 'Aluguel do imovel'        AS descricao, 'aluguel'       AS categoria, 6800.0 AS valor, 4  AS dia, 1 AS pago UNION ALL
+  SELECT 'Honorarios de contabilidade', 'contabilidade', 1200.0, 4,  1 UNION ALL
+  SELECT 'Energia eletrica',            'energia',       1520.0, 9,  0 UNION ALL
+  SELECT 'Agua e esgoto',               'agua',           295.0, 9,  0 UNION ALL
+  SELECT 'Internet e telefonia',        'internet',       399.0, 14, 0 UNION ALL
+  SELECT 'Simples Nacional',            'impostos',      5240.0, 19, 0 UNION ALL
+  SELECT 'Seguro do estabelecimento',   'seguro',         540.0, 24, 0 UNION ALL
+  SELECT 'Trafego pago e midias',       'marketing',     1500.0, 9,  0
+) d;
+
+-- Uma despesa avulsa ja vencida, para a tela mostrar o alerta de atraso
+INSERT INTO despesa (descricao, categoria, valor, vencimento, recorrente, observacao, situacao) VALUES
+  ('Manutencao do portao do patio', 'manutencao', 780.0,
+   date('now','localtime','-6 days'), 0, 'Servico executado; boleto em aberto.', 'aberta');

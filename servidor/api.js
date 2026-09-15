@@ -121,8 +121,21 @@ rota('GET', '/api/painel', 'painel.gerencial', () => {
   const folha = um(`
     SELECT COALESCE(SUM(salario), 0) AS total FROM funcionario WHERE situacao <> 'desligado'`);
 
-  const custoVeiculos = um(`
+  // Custo das motos VENDIDAS no mes. Nao e o mesmo que a compra de
+  // veiculos: moto comprada para revender e estoque, nao despesa — vira
+  // custo no mes em que sai, junto com a receita da venda. Somar toda a
+  // compra do mes fazia o resultado mostrar prejuizo em mes de reposicao
+  // de patio, mesmo com a loja vendendo bem.
+  const custoVendido = um(`
     SELECT COALESCE(SUM(m.custo), 0) AS total
+    FROM contrato c
+    JOIN moto m ON m.id = c.moto_id
+    WHERE c.situacao <> 'cancelado'
+      AND strftime('%Y-%m', c.data_emissao) = strftime('%Y-%m', date('now','localtime'))`);
+
+  // Quanto saiu do caixa para repor o patio (investimento, fora do resultado)
+  const compraVeiculos = um(`
+    SELECT COALESCE(SUM(m.custo), 0) AS total, COUNT(*) AS motos
     FROM moto m
     WHERE strftime('%Y-%m', m.data_entrada) = strftime('%Y-%m', date('now','localtime'))`);
 
@@ -157,15 +170,39 @@ rota('GET', '/api/painel', 'painel.gerencial', () => {
     alertas.push({ texto: `${leadsParados.total} lead(s) sem contato há 3 dias ou mais`, modulo: 'Comercial', nivel: 'alerta' });
   }
 
+  // Despesas fixas da loja no mes (RF-09): sem elas o resultado abaixo
+  // ignorava aluguel, energia e impostos.
+  const despesasMes = um(`
+    SELECT COALESCE(SUM(valor),0) AS total,
+           COALESCE(SUM(CASE WHEN situacao_real = 'vencida' THEN valor ELSE 0 END),0) AS vencidas,
+           COUNT(*) AS contas
+      FROM vw_despesa
+     WHERE competencia = strftime('%Y-%m', date('now','localtime'))
+       AND situacao <> 'cancelada'`);
+
+  if (despesasMes.vencidas > 0) {
+    alertas.push({
+      texto: `Despesas da loja vencidas: ${despesasMes.vencidas.toLocaleString('pt-BR', {
+        style: 'currency', currency: 'BRL' })}`,
+      modulo: 'Financeiro', nivel: 'erro',
+    });
+  }
+
   return {
     mes, mesAnterior, estoque, inadimplencia, aReceber,
     historico, ranking, alertas,
     resumoFinanceiro: {
       entradas: mes.faturamento,
-      compraVeiculos: custoVeiculos.total,
+      custoVendido: custoVendido.total,
       folha: folha.total,
       comissoes: comissaoMes.total,
-      resultado: mes.faturamento - custoVeiculos.total - folha.total - comissaoMes.total,
+      despesasFixas: despesasMes.total,
+      contasFixas: despesasMes.contas,
+      resultado: mes.faturamento - custoVendido.total - folha.total
+                 - comissaoMes.total - despesasMes.total,
+      // Investimento em estoque: sai do caixa, mas nao e resultado do mes
+      compraVeiculos: compraVeiculos.total,
+      motosCompradas: compraVeiculos.motos,
     },
   };
 });
@@ -515,7 +552,99 @@ rota('GET', '/api/financeiro/resumo', 'financeiro.ler', () => {
   const comissoes = um(`
     SELECT COALESCE(SUM(comissao),0) AS valor FROM vw_comissao
     WHERE competencia = strftime('%Y-%m', date('now','localtime'))`);
-  return { aReceber, vencidas, recebidoMes, aPagar: { folha: folha.valor, comissoes: comissoes.valor } };
+  // Despesas fixas da loja no mes corrente (RF-09)
+  const despesas = um(`
+    SELECT COALESCE(SUM(valor),0) AS valor,
+           COALESCE(SUM(CASE WHEN situacao_real = 'paga'    THEN valor ELSE 0 END),0) AS pagas,
+           COALESCE(SUM(CASE WHEN situacao_real = 'vencida' THEN valor ELSE 0 END),0) AS vencidas,
+           COUNT(*) AS contas
+      FROM vw_despesa
+     WHERE competencia = strftime('%Y-%m', date('now','localtime'))
+       AND situacao <> 'cancelada'`);
+  return {
+    aReceber, vencidas, recebidoMes, despesas,
+    aPagar: { folha: folha.valor, comissoes: comissoes.valor, despesas: despesas.valor },
+  };
+});
+
+// =====================================================================
+//  RF-09 — DESPESAS FIXAS DA LOJA
+//
+//  Fecha a lacuna apontada no proprio painel: ate aqui o resultado do mes
+//  ignorava aluguel, energia e impostos, e por isso nunca batia com o que
+//  o proprietario enxerga no caixa.
+// =====================================================================
+rota('GET', '/api/despesas', 'financeiro.ler', ({ query }) => {
+  const competencia = query.competencia || null;
+  return todos(
+    `SELECT * FROM vw_despesa
+      WHERE (? IS NULL OR competencia = ?)
+        AND situacao <> 'cancelada'
+      ORDER BY date(vencimento) DESC, id DESC`,
+    competencia, competencia
+  );
+});
+
+rota('GET', '/api/despesas/resumo', 'financeiro.ler', () =>
+  todos(`
+    SELECT competencia,
+           SUM(valor) AS total,
+           SUM(CASE WHEN situacao_real = 'paga' THEN valor ELSE 0 END) AS pago,
+           SUM(CASE WHEN situacao_real IN ('aberta','vencida') THEN valor ELSE 0 END) AS em_aberto
+      FROM vw_despesa
+     WHERE situacao <> 'cancelada'
+     GROUP BY competencia
+     ORDER BY competencia DESC
+     LIMIT 6`)
+);
+
+rota('POST', '/api/despesas', 'financeiro.escrever', ({ corpo }) => {
+  const descricao = String(corpo.descricao || '').trim();
+  const valor = Number(corpo.valor);
+  if (!descricao) throw new ErroDeRegra('Informe a descricao da despesa.');
+  if (!Number.isFinite(valor) || valor <= 0) {
+    throw new ErroDeRegra('O valor da despesa deve ser maior que zero.');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(corpo.vencimento || ''))) {
+    throw new ErroDeRegra('Informe a data de vencimento.');
+  }
+  const r = executar(
+    `INSERT INTO despesa (descricao, categoria, valor, vencimento, recorrente, observacao)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    descricao, corpo.categoria || 'outros', valor, corpo.vencimento,
+    corpo.recorrente ? 1 : 0, corpo.observacao || null
+  );
+  return { id: Number(r.lastInsertRowid) };
+});
+
+rota('PUT', '/api/despesas/:id', 'financeiro.escrever', ({ params, corpo }) => {
+  const despesa = um('SELECT * FROM despesa WHERE id = ?', params[0]);
+  if (!despesa) throw new ErroDeRegra('Despesa nao encontrada.', 404);
+  const valor = corpo.valor === undefined ? despesa.valor : Number(corpo.valor);
+  if (!Number.isFinite(valor) || valor <= 0) {
+    throw new ErroDeRegra('O valor da despesa deve ser maior que zero.');
+  }
+  executar(
+    `UPDATE despesa SET descricao = ?, categoria = ?, valor = ?, vencimento = ?,
+            recorrente = ?, observacao = ?
+      WHERE id = ?`,
+    corpo.descricao ?? despesa.descricao, corpo.categoria ?? despesa.categoria,
+    valor, corpo.vencimento ?? despesa.vencimento,
+    corpo.recorrente === undefined ? despesa.recorrente : (corpo.recorrente ? 1 : 0),
+    corpo.observacao ?? despesa.observacao, params[0]
+  );
+  return { ok: true };
+});
+
+rota('POST', '/api/despesas/:id/pagar', 'financeiro.escrever', ({ params, corpo }) => {
+  const despesa = um('SELECT * FROM despesa WHERE id = ?', params[0]);
+  if (!despesa) throw new ErroDeRegra('Despesa nao encontrada.', 404);
+  if (despesa.situacao === 'paga') throw new ErroDeRegra('Esta despesa ja foi paga.');
+  executar(
+    `UPDATE despesa SET situacao = 'paga', data_pagamento = ? WHERE id = ?`,
+    corpo.data || new Date().toISOString().slice(0, 10), params[0]
+  );
+  return { ok: true };
 });
 
 rota('GET', '/api/contratos', 'financeiro.ler', () =>
@@ -724,3 +853,113 @@ rota('PUT', '/api/parametros', 'parametros', ({ corpo }) => {
 
 // RNFS-06 — copia de seguranca da base
 rota('POST', '/api/backup', 'parametros', () => ({ arquivo: gerarBackup() }));
+
+// =====================================================================
+//  RF-10 — BUSCA GLOBAL
+//
+//  Uma consulta so, atravessando os quatro modulos. O que cada usuario
+//  encontra depende do seu perfil: o vendedor so acha os clientes da
+//  propria carteira (RNFR-01.1) e nao alcanca contratos (RNFR-06.1),
+//  porque a filtragem acontece aqui, e nao na tela.
+// =====================================================================
+rota('GET', '/api/busca', 'livre', ({ query, usuario }) => {
+  const termo = String(query.q || '').trim();
+  if (termo.length < 2) return { termo, total: 0, grupos: [] };
+
+  const like = `%${termo}%`;
+  const soNumeros = termo.replace(/\D/g, '');
+  const porDocumento = soNumeros.length >= 3 ? `%${soNumeros}%` : ' sem-numero';
+  const grupos = [];
+  const LIMITE = 6;
+
+  // --- Clientes (RF-01) -------------------------------------------------
+  if (pode(usuario, 'comercial.ler')) {
+    const daCarteira = !pode(usuario, 'painel.gerencial') && usuario.funcionarioId;
+    const clientes = todos(
+      `SELECT id, nome, cpf, telefone, cidade FROM cliente
+        WHERE (nome LIKE ? COLLATE NOCASE
+               OR replace(replace(cpf,'.',''),'-','') LIKE ?
+               OR replace(replace(replace(telefone,'(',''),')',''),'-','') LIKE ?)
+          ${daCarteira ? 'AND vendedor_id = ?' : ''}
+        ORDER BY nome LIMIT ${LIMITE}`,
+      ...(daCarteira ? [like, porDocumento, porDocumento, usuario.funcionarioId]
+                     : [like, porDocumento, porDocumento])
+    );
+    if (clientes.length) {
+      grupos.push({
+        modulo: 'Clientes', icone: '🤝', destino: 'comercial/clientes',
+        itens: clientes.map((c) => ({
+          id: c.id, titulo: c.nome,
+          detalhe: [c.cpf, c.telefone, c.cidade].filter(Boolean).join(' · '),
+        })),
+      });
+    }
+  }
+
+  // --- Motocicletas (RF-03) --------------------------------------------
+  if (pode(usuario, 'estoque.ler')) {
+    const motos = todos(
+      `SELECT id, codigo, marca, modelo, ano, placa, situacao, preco_venda, dias_patio
+         FROM vw_estoque
+        WHERE codigo LIKE ? COLLATE NOCASE OR modelo LIKE ? COLLATE NOCASE
+           OR marca LIKE ? COLLATE NOCASE OR placa LIKE ? COLLATE NOCASE
+           OR chassi LIKE ? COLLATE NOCASE
+        ORDER BY codigo LIMIT ${LIMITE}`,
+      like, like, like, like, like
+    );
+    if (motos.length) {
+      grupos.push({
+        modulo: 'Estoque', icone: '🏍️', destino: 'estoque/patio',
+        itens: motos.map((m) => ({
+          id: m.id, titulo: `${m.codigo} — ${m.marca} ${m.modelo} ${m.ano}`,
+          detalhe: [m.placa, m.situacao, `${m.dias_patio} dias no pátio`].filter(Boolean).join(' · '),
+        })),
+      });
+    }
+  }
+
+  // --- Contratos (RF-04) -----------------------------------------------
+  if (pode(usuario, 'financeiro.ler')) {
+    const contratos = todos(
+      `SELECT c.id, c.numero, c.valor_total, c.situacao, cl.nome AS cliente_nome,
+              m.codigo AS moto_codigo
+         FROM contrato c
+         JOIN cliente cl ON cl.id = c.cliente_id
+         JOIN moto m     ON m.id = c.moto_id
+        WHERE c.numero LIKE ? COLLATE NOCASE OR cl.nome LIKE ? COLLATE NOCASE
+        ORDER BY c.data_emissao DESC LIMIT ${LIMITE}`,
+      like, like
+    );
+    if (contratos.length) {
+      grupos.push({
+        modulo: 'Contratos', icone: '💰', destino: 'financeiro/contratos',
+        itens: contratos.map((c) => ({
+          id: c.id, titulo: `${c.numero} — ${c.cliente_nome}`,
+          detalhe: `${c.moto_codigo} · ${c.situacao}`,
+        })),
+      });
+    }
+  }
+
+  // --- Chamados de pos-venda (RF-02) -----------------------------------
+  if (pode(usuario, 'sac.ler')) {
+    const chamados = todos(
+      `SELECT id, numero, assunto, cliente_nome, situacao_real FROM vw_chamado
+        WHERE numero LIKE ? COLLATE NOCASE OR assunto LIKE ? COLLATE NOCASE
+           OR cliente_nome LIKE ? COLLATE NOCASE
+        ORDER BY data_abertura DESC LIMIT ${LIMITE}`,
+      like, like, like
+    );
+    if (chamados.length) {
+      grupos.push({
+        modulo: 'SAC', icone: '🛠️', destino: 'comercial/sac',
+        itens: chamados.map((ch) => ({
+          id: ch.id, titulo: `${ch.numero} — ${ch.assunto}`,
+          detalhe: `${ch.cliente_nome} · ${ch.situacao_real}`,
+        })),
+      });
+    }
+  }
+
+  return { termo, total: grupos.reduce((s, g) => s + g.itens.length, 0), grupos };
+});

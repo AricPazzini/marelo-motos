@@ -7,8 +7,8 @@
 // =====================================================================
 
 import {
-  api, dinheiro, numero, tabela, etiqueta, escapar, data,
-  janela, lerCampos, recado, confirmar,
+  api, dinheiro, numero, tabela, etiqueta, escapar, data, mesPorExtenso,
+  janela, lerCampos, recado, confirmar, exportarCsv,
 } from '../nucleo.js';
 import { recarregar } from '../app.js';
 
@@ -17,12 +17,14 @@ export function abas() {
     { id: 'resumo', nome: 'Resumo' },
     { id: 'contratos', nome: 'Contratos' },
     { id: 'cobranca', nome: 'Cobrança' },
+    { id: 'despesas', nome: 'Despesas fixas' },
   ];
 }
 
 export async function montar(area, contexto, aba) {
   if (aba === 'contratos') return montarContratos(area, contexto);
   if (aba === 'cobranca') return montarCobranca(area, contexto);
+  if (aba === 'despesas') return montarDespesas(area, contexto);
   return montarResumo(area, contexto);
 }
 
@@ -69,8 +71,34 @@ async function montarResumo(area) {
       </div>
       <div class="card kpi">
         <div class="rotulo">A pagar no mês</div>
-        <div class="valor">${dinheiro(d.aPagar.folha + d.aPagar.comissoes)}</div>
-        <div class="delta">folha + comissões</div>
+        <div class="valor">${dinheiro(d.aPagar.folha + d.aPagar.comissoes + d.aPagar.despesas)}</div>
+        <div class="delta">folha, comissões e despesas fixas</div>
+      </div>
+    </div>
+
+    <div class="grade g3 mt">
+      <div class="card kpi">
+        <div class="rotulo">Despesas fixas do mês</div>
+        <div class="valor">${dinheiro(d.despesas.valor)}</div>
+        <div class="delta">${numero(d.despesas.contas)} conta(s) no período</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Já pagas</div>
+        <div class="valor">${dinheiro(d.despesas.pagas)}</div>
+        <div class="delta">
+          ${d.despesas.valor
+            ? `${Math.round((d.despesas.pagas / d.despesas.valor) * 100)}% do total do mês`
+            : '—'}
+        </div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Despesas vencidas</div>
+        <div class="valor">${dinheiro(d.despesas.vencidas)}</div>
+        <div class="delta">
+          ${d.despesas.vencidas
+            ? '<span class="down">contas da loja em atraso</span>'
+            : '<span class="up">nenhuma conta atrasada</span>'}
+        </div>
       </div>
     </div>
 
@@ -356,4 +384,208 @@ async function montarCobranca(area, contexto) {
       recarregar();
     });
   }
+}
+
+// =====================================================================
+//  DESPESAS FIXAS DA LOJA  (RF-09)
+//
+//  Aluguel, energia, impostos e o resto do custo de manter a loja
+//  aberta. Ate aqui o resultado do mes era so vendas menos folha, e por
+//  isso nunca batia com o caixa que o proprietario enxerga.
+// =====================================================================
+const CATEGORIAS = {
+  aluguel: 'Aluguel', energia: 'Energia elétrica', agua: 'Água e esgoto',
+  internet: 'Internet', telefone: 'Telefone', impostos: 'Impostos',
+  contabilidade: 'Contabilidade', marketing: 'Marketing',
+  manutencao: 'Manutenção', seguro: 'Seguro', outros: 'Outros',
+};
+
+const competenciaAtual = () => new Date().toISOString().slice(0, 7);
+
+async function montarDespesas(area, contexto) {
+  const [despesas, resumo] = await Promise.all([
+    api.ler('/api/despesas'),
+    api.ler('/api/despesas/resumo'),
+  ]);
+  const podeEditar = contexto.permissoes['financeiro.escrever'];
+
+  const doMes = despesas.filter((d) => d.competencia === competenciaAtual());
+  const emAberto = doMes.filter((d) => d.situacao_real !== 'paga');
+  const vencidas = doMes.filter((d) => d.situacao_real === 'vencida');
+  const totalMes = doMes.reduce((s, d) => s + d.valor, 0);
+
+  // Quanto cada categoria pesa no mes
+  const porCategoria = {};
+  for (const d of doMes) porCategoria[d.categoria] = (porCategoria[d.categoria] || 0) + d.valor;
+  const ranking = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]);
+  const maior = ranking.length ? ranking[0][1] : 0;
+
+  area.innerHTML = `
+    <h1 class="titulo">Despesas fixas da loja</h1>
+    <p class="subtitulo">
+      O custo de manter a loja aberta. Entra no resultado do mês junto
+      com a folha de pagamento e as comissões.
+    </p>
+
+    ${vencidas.length ? `
+      <div class="aviso alerta">
+        <b>${vencidas.length} conta(s) vencida(s)</b>, somando
+        ${dinheiro(vencidas.reduce((s, d) => s + d.valor, 0))} —
+        ${escapar(vencidas.map((d) => d.descricao).join(' · '))}
+      </div>` : ''}
+
+    <div class="grade g3">
+      <div class="card kpi">
+        <div class="rotulo">Total de ${escapar(mesPorExtenso(competenciaAtual()))}</div>
+        <div class="valor">${dinheiro(totalMes)}</div>
+        <div class="delta">${numero(doMes.length)} conta(s) no período</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Ainda em aberto</div>
+        <div class="valor">${dinheiro(emAberto.reduce((s, d) => s + d.valor, 0))}</div>
+        <div class="delta">${numero(emAberto.length)} conta(s) a pagar</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Média mensal</div>
+        <div class="valor">${dinheiro(
+          resumo.length ? resumo.reduce((s, r) => s + r.total, 0) / resumo.length : 0)}</div>
+        <div class="delta">base: ${numero(resumo.length)} competência(s)</div>
+      </div>
+    </div>
+
+    ${ranking.length ? `
+      <div class="card mt">
+        <h3>Para onde vai o dinheiro — ${escapar(mesPorExtenso(competenciaAtual()))}</h3>
+        <ul class="lista-simples">
+          ${ranking.map(([cat, valor]) => `
+            <li>
+              <span style="flex:1;min-width:0">
+                ${escapar(CATEGORIAS[cat] || cat)}
+                <span style="display:block;height:5px;margin-top:5px;border-radius:3px;
+                             background:var(--amarelo);width:${maior ? (valor / maior) * 100 : 0}%"></span>
+              </span>
+              <b>${dinheiro(valor)}</b>
+            </li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+    <div class="barra-acoes mt">
+      ${podeEditar ? '<button class="btn" id="nova-despesa">+ Lançar despesa</button>' : ''}
+      <button class="btn linha" id="exportar-despesas">Exportar CSV</button>
+    </div>
+
+    <div class="card tabela">
+      <h3>Lançamentos</h3>
+      ${tabela({
+        colunas: [
+          {
+            titulo: 'Descrição',
+            valor: (l) => `<b>${escapar(l.descricao)}</b>${
+              l.recorrente ? ' <span class="tag t-neutro">mensal</span>' : ''}`,
+          },
+          { titulo: 'Categoria', valor: (l) => escapar(CATEGORIAS[l.categoria] || l.categoria) },
+          { titulo: 'Vencimento', valor: (l) => data(l.vencimento) },
+          { titulo: 'Valor', alinha: 'direita', valor: (l) => dinheiro(l.valor) },
+          {
+            titulo: 'Situação',
+            valor: (l) => etiqueta(l.situacao_real) +
+              (l.situacao_real === 'vencida' ? ` <small>${l.dias_atraso} dia(s)</small>` : ''),
+          },
+          {
+            titulo: '',
+            valor: (l) => (podeEditar && l.situacao_real !== 'paga')
+              ? `<button class="btn linha" data-pagar="${l.id}">Registrar pagamento</button>`
+              : '',
+          },
+        ],
+        linhas: despesas,
+        vazio: 'Nenhuma despesa lançada.',
+      })}
+    </div>`;
+
+  area.querySelector('#exportar-despesas')?.addEventListener('click', () => {
+    exportarCsv('despesas-marelo-motos', despesas.map((d) => ({
+      Descricao: d.descricao,
+      Categoria: CATEGORIAS[d.categoria] || d.categoria,
+      Vencimento: d.vencimento,
+      Valor: d.valor,
+      Situacao: d.situacao_real,
+      Pagamento: d.data_pagamento || '',
+    })));
+  });
+
+  area.querySelector('#nova-despesa')?.addEventListener('click', abrirLancamento);
+
+  for (const botao of area.querySelectorAll('[data-pagar]')) {
+    botao.addEventListener('click', async () => {
+      const ok = await confirmar(
+        'Registrar o pagamento desta despesa?',
+        'A conta passa a contar como paga no resultado do mês.');
+      if (!ok) return;
+      await api.criar(`/api/despesas/${botao.dataset.pagar}/pagar`, {});
+      recado('Pagamento registrado.');
+      recarregar();
+    });
+  }
+}
+
+function abrirLancamento() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  janela({
+    titulo: 'Lançar despesa',
+    descricao: 'Despesas marcadas como mensais representam o custo fixo da loja.',
+    corpo: `
+      <div class="campo">
+        <label for="descricao">Descrição</label>
+        <input name="descricao" id="descricao" placeholder="Aluguel do imóvel">
+      </div>
+
+      <div class="linha-campos tres">
+        <div class="campo">
+          <label for="categoria">Categoria</label>
+          <select name="categoria" id="categoria">
+            ${Object.entries(CATEGORIAS)
+              .map(([valor, nome]) => `<option value="${valor}">${nome}</option>`).join('')}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="valor">Valor (R$)</label>
+          <input type="number" step="0.01" min="0.01" name="valor" id="valor">
+        </div>
+        <div class="campo">
+          <label for="vencimento">Vencimento</label>
+          <input type="date" name="vencimento" id="vencimento" value="${hoje}">
+        </div>
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="recorrente">Repete todo mês?</label>
+          <select name="recorrente" id="recorrente">
+            <option value="1">Sim — despesa fixa</option>
+            <option value="">Não — lançamento avulso</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="observacao">Observação</label>
+          <input name="observacao" id="observacao" placeholder="Opcional">
+        </div>
+      </div>`,
+    acoes: [
+      { texto: 'Cancelar', estilo: 'linha' },
+      {
+        texto: 'Lançar despesa',
+        aoClicar: async ({ fundo }) => {
+          const dados = lerCampos(fundo);
+          await api.criar('/api/despesas', {
+            ...dados,
+            valor: Number(dados.valor),
+            recorrente: !!dados.recorrente,
+          });
+          recado('Despesa lançada.');
+          recarregar();
+        },
+      },
+    ],
+  });
 }
