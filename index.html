@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar — Marelo Motos</title>
+<link rel="stylesheet" href="./css/estilo.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23FECC4D'/><text y='23' x='7' font-size='18' font-family='sans-serif' font-weight='bold'>M</text></svg>">
+<script>
+  // Aplica o tema salvo antes de desenhar, para a tela nao piscar branca
+  try {
+    var t = localStorage.getItem("marelo_tema");
+    if (t) document.documentElement.setAttribute("data-tema", t);
+  } catch (e) {}
+</script>
+
+<!-- Versao GitHub Pages: sobe o banco SQLite dentro do navegador -->
+<script src="./js/dados/sql-wasm.js"></script>
+<script type="module">
+  import './js/dados/local.js';
+  await globalThis.MARELO_LOCAL.iniciar();
+  const email = sessionStorage.getItem('marelo_email');
+  if (email) globalThis.MARELO_LOCAL.restaurarSessao(email);
+  document.dispatchEvent(new Event('marelo-pronto'));
+</script>
+</head>
+<body>
+
+<main class="tela-login">
+  <div class="caixa-login">
+    <button type="button" id="botao-tema" class="tema-canto"></button>
+    <div class="marca"><i></i>MARELO MOTOS</div>
+    <div class="marca-sub">Sistema de Gestão</div>
+
+    <form id="formulario" autocomplete="on">
+      <div class="campo">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" name="email" required autocomplete="username"
+               placeholder="seu.nome@marelomotos.com.br">
+      </div>
+      <div class="campo">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" name="senha" required autocomplete="current-password">
+      </div>
+
+      <div id="erro" class="erro-login oculto" role="alert"></div>
+
+      <button type="submit" class="entrar" id="botao">Entrar no sistema</button>
+    </form>
+
+    <div class="atalhos-login">
+      <h4>Usuários de teste — senha: marelo123</h4>
+
+      <button type="button" class="atalho" data-email="marcelo@marelomotos.com.br">
+        <span class="ic">👔</span>
+        <span>
+          <span class="nm">Marcelo Marelo — Proprietário</span><br>
+          <span class="ds">Acesso total: painel, financeiro, RH e estoque</span>
+        </span>
+      </button>
+
+      <button type="button" class="atalho" data-email="rodrigo@marelomotos.com.br">
+        <span class="ic">🧑‍💼</span>
+        <span>
+          <span class="nm">Rodrigo Alves — Vendedor</span><br>
+          <span class="ds">Só a própria carteira; sem folha nem painel gerencial</span>
+        </span>
+      </button>
+
+      <button type="button" class="atalho" data-email="claudia@marelomotos.com.br">
+        <span class="ic">💰</span>
+        <span>
+          <span class="nm">Cláudia Bertoldo — Financeiro</span><br>
+          <span class="ds">Contratos, boletos e cobrança</span>
+        </span>
+      </button>
+    </div>
+
+    <div class="aviso info" style="margin-top:22px;text-align:left">
+      <b>Versão de demonstração.</b> O sistema roda inteiro no seu navegador,
+      com um banco SQLite de verdade montado na hora. Pode cadastrar, fechar
+      vendas e mexer à vontade: ao recarregar a página tudo volta ao estado
+      inicial, e nada é enviado para lugar nenhum.
+    </div>
+    <p class="dica" style="margin-top:20px;font-size:11.5px;color:var(--texto-fraco);line-height:1.6;text-align:center">
+      Protótipo do Projeto Integrador em ADS II — FATEC.<br>
+      Dados fictícios, para validação com o cliente.
+    </p>
+  </div>
+</main>
+
+<script type="module">
+  import { ligarBotaoTema } from "./js/tema.js";
+  ligarBotaoTema(document.getElementById("botao-tema"), { comTexto: false });
+
+  const formulario = document.getElementById('formulario');
+  const campoEmail = document.getElementById('email');
+  const campoSenha = document.getElementById('senha');
+  const aviso = document.getElementById('erro');
+  const botao = document.getElementById('botao');
+
+  // Os atalhos apenas preenchem os campos: o login continua passando
+  // pela validação de senha no servidor (RNFS-01).
+  for (const atalho of document.querySelectorAll('.atalho')) {
+    atalho.addEventListener('click', () => {
+      campoEmail.value = atalho.dataset.email;
+      campoSenha.value = 'marelo123';
+      campoSenha.focus();
+    });
+  }
+
+  formulario.addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    aviso.classList.add('oculto');
+    botao.disabled = true;
+    botao.textContent = 'Entrando...';
+
+    try {
+      const credenciais = { email: campoEmail.value, senha: campoSenha.value };
+
+      // No sistema real o login vai ao servidor; na versão publicada no
+      // GitHub Pages as mesmas rotas rodam dentro do navegador.
+      let ok, dados;
+      if (globalThis.MARELO_LOCAL) {
+        ({ ok, dados } = globalThis.MARELO_LOCAL.chamar('/api/login', {
+          method: 'POST', corpo: credenciais,
+        }));
+        if (ok) sessionStorage.setItem('marelo_email', credenciais.email);
+      } else {
+        const resposta = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credenciais),
+        });
+        ok = resposta.ok;
+        dados = await resposta.json();
+      }
+
+      if (!ok) {
+        aviso.textContent = dados.erro || 'Não foi possível entrar.';
+        aviso.classList.remove('oculto');
+        campoSenha.select();
+        return;
+      }
+      window.location.href = "./app.html";
+    } catch {
+      aviso.textContent = 'O servidor não respondeu. Confira se a janela do sistema continua aberta.';
+      aviso.classList.remove('oculto');
+    } finally {
+      botao.disabled = false;
+      botao.textContent = 'Entrar no sistema';
+    }
+  });
+
+  campoEmail.focus();
+</script>
+
+</body>
+</html>
