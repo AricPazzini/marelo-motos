@@ -5,6 +5,14 @@
    padrao visual e de nomenclatura em todos os modulos).
    ===================================================================== */
 
+/* ---------------------------------------------------------------------
+   TEMA CLARO (padrao)
+
+   Os nomes das cores vem do tema claro, que veio do prototipo aprovado
+   em Engenharia de Software II. No tema escuro os mesmos nomes recebem
+   outros valores — por isso "--branco" nao e branco la embaixo: ele
+   significa "a cor da superficie do cartao".
+   --------------------------------------------------------------------- */
 :root{
   --amarelo:#FECC4D;
   --amarelo-fraco:#FFF4D6;
@@ -21,7 +29,93 @@
   --azul:#27507A;
   --sidebar:250px;
   --raio:12px;
+
+  /* usadas em pontos onde a cor nao podia ser fixa nos dois temas */
+  --texto-sidebar:#332B14;
+  --linha-hover:#FCFBF8;
+  --linha-destaque:#FFFBF0;
+  --sombra-modal:rgba(0,0,0,.28);
+
+  /* fundos das etiquetas e avisos */
+  --ok-fundo:#E5F3EA;
+  --erro-fundo:#FBEDEB;
+  --erro-borda:#EFCFCA;
+  --info-fundo:#EAF0F7;
+  --info-borda:#CFDCEC;
+  --aviso-borda:#F0DFAF;
+  --realce-suave:#FFFDF7;
 }
+
+/* ---------------------------------------------------------------------
+   TEMA ESCURO
+
+   Vale quando o usuario escolhe (data-tema="escuro") e tambem quando o
+   proprio sistema operacional esta no escuro e o usuario ainda nao
+   escolheu nada. O amarelo da marca e rebaixado: o tom do tema claro,
+   sobre fundo escuro, vibra e cansa a vista.
+   --------------------------------------------------------------------- */
+:root[data-tema="escuro"]{
+  --amarelo:#E9B93D;
+  --amarelo-fraco:#3A2F12;
+  --amarelo-escuro:#F2CE6A;
+  --fundo:#161513;
+  --branco:#1F1E1B;           /* superficie dos cartoes */
+  --linha:#33302A;
+  --linha-fraca:#272520;
+  --texto:#F2EFE8;
+  --texto-medio:#C9C3B6;
+  --texto-fraco:#9A9385;
+  --verde:#5FBF85;
+  --vermelho:#E8776A;
+  --azul:#7FAEDC;
+
+  --texto-sidebar:#1B1710;
+  --linha-hover:#26241F;
+  --linha-destaque:#2B2718;
+  --sombra-modal:rgba(0,0,0,.6);
+
+  --ok-fundo:#17301F;
+  --erro-fundo:#3A1E1A;
+  --erro-borda:#5A2E27;
+  --info-fundo:#1A2836;
+  --info-borda:#2C4459;
+  --aviso-borda:#514018;
+  --realce-suave:#2A2619;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-tema="claro"]){
+    --amarelo:#E9B93D;
+    --amarelo-fraco:#3A2F12;
+    --amarelo-escuro:#F2CE6A;
+    --fundo:#161513;
+    --branco:#1F1E1B;
+    --linha:#33302A;
+    --linha-fraca:#272520;
+    --texto:#F2EFE8;
+    --texto-medio:#C9C3B6;
+    --texto-fraco:#9A9385;
+    --verde:#5FBF85;
+    --vermelho:#E8776A;
+    --azul:#7FAEDC;
+
+    --texto-sidebar:#1B1710;
+    --linha-hover:#26241F;
+    --linha-destaque:#2B2718;
+    --sombra-modal:rgba(0,0,0,.6);
+
+    --ok-fundo:#17301F;
+    --erro-fundo:#3A1E1A;
+    --erro-borda:#5A2E27;
+    --info-fundo:#1A2836;
+    --info-borda:#2C4459;
+    --aviso-borda:#514018;
+    --realce-suave:#2A2619;
+  }
+}
+
+/* Evita o "flash branco" ao trocar de tela */
+html{background:var(--fundo)}
 
 *{box-sizing:border-box;margin:0;padding:0}
 
@@ -66,7 +160,7 @@ a{color:var(--azul)}
 .campo .dica{font-size:11.5px;color:var(--texto-fraco);margin-top:5px}
 
 .entrar{
-  width:100%;background:var(--amarelo);color:#332B14;font-weight:700;font-size:15px;
+  width:100%;background:var(--amarelo);color:var(--texto-sidebar);font-weight:700;font-size:15px;
   padding:13px;border-radius:10px;margin-top:26px;transition:.12s;
 }
 .entrar:hover{filter:brightness(.95)}
@@ -79,13 +173,13 @@ a{color:var(--azul)}
   border:1px solid var(--linha);border-radius:9px;padding:9px 11px;margin-bottom:7px;
   transition:.12s;background:var(--branco);
 }
-.atalho:hover{border-color:var(--amarelo);background:#FFFDF7}
+.atalho:hover{border-color:var(--amarelo);background:var(--realce-suave)}
 .atalho .ic{font-size:17px}
 .atalho .nm{font-weight:600;font-size:12.5px}
 .atalho .ds{font-size:11px;color:var(--texto-fraco)}
 
 .erro-login{
-  background:#FBEDEB;border:1px solid #EFCFCA;color:var(--vermelho);
+  background:var(--erro-fundo);border:1px solid var(--erro-borda);color:var(--vermelho);
   padding:10px 12px;border-radius:9px;font-size:12.5px;margin-top:16px;
 }
 
@@ -97,7 +191,7 @@ a{color:var(--azul)}
   display:flex;flex-direction:column;padding:24px 0 18px;
   position:sticky;top:0;height:100vh;
 }
-.sidebar,.sidebar button{color:#332B14}
+.sidebar,.sidebar button{color:var(--texto-sidebar)}
 .marca-side{padding:0 22px 20px;font-size:15px;font-weight:700}
 .usuario{padding:0 22px 18px;display:flex;align-items:center;gap:11px}
 .avatar{
@@ -116,6 +210,11 @@ a{color:var(--azul)}
 .item:hover{background:rgba(255,255,255,.5)}
 .item.ativo{background:var(--branco);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .item .ic{width:18px;text-align:center;font-size:14px}
+:root[data-tema="escuro"] .item.ativo,
+:root[data-tema="escuro"] .item.ativo button{color:var(--texto)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-tema="claro"]) .item.ativo{color:var(--texto)}
+}
 .rodape-side{border-top:1px solid rgba(51,43,20,.18);margin:14px 22px 0;padding-top:12px}
 .rodape-side button{display:block;width:100%;text-align:left;font-size:12.5px;padding:5px 0;opacity:.8}
 .rodape-side button:hover{opacity:1;text-decoration:underline}
@@ -211,24 +310,24 @@ th{font-size:11px;font-weight:600;letter-spacing:.3px;color:var(--texto-fraco);t
 td{font-size:13px;padding:11px 10px;border-bottom:1px solid var(--linha-fraca);color:var(--texto-medio)}
 td:first-child{color:var(--texto);font-weight:500}
 tbody tr:last-child td{border-bottom:none}
-tbody tr:hover td{background:#FCFBF8}
+tbody tr:hover td{background:var(--linha-hover)}
 .num{text-align:right;font-variant-numeric:tabular-nums}
-.destaque-linha td{background:#FFFBF0}
+.destaque-linha td{background:var(--linha-destaque)}
 
 .tag{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px;white-space:nowrap}
-.t-ok{background:#E5F3EA;color:var(--verde)}
+.t-ok{background:var(--ok-fundo);color:var(--verde)}
 .t-alerta{background:var(--amarelo-fraco);color:var(--amarelo-escuro)}
-.t-erro{background:#FBEDEB;color:var(--vermelho)}
-.t-info{background:#EAF0F7;color:var(--azul)}
+.t-erro{background:var(--erro-fundo);color:var(--vermelho)}
+.t-info{background:var(--info-fundo);color:var(--azul)}
 .t-neutro{background:var(--fundo);color:var(--texto-fraco);border:1px solid var(--linha)}
 
 /* ===== BOTOES ===== */
-.btn{background:var(--amarelo);color:#332B14;font-weight:600;font-size:12.5px;padding:8px 16px;border-radius:8px;transition:.12s;display:inline-block}
+.btn{background:var(--amarelo);color:var(--texto-sidebar);font-weight:600;font-size:12.5px;padding:8px 16px;border-radius:8px;transition:.12s;display:inline-block}
 .btn:hover{filter:brightness(.95)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.linha{background:var(--branco);color:var(--texto-medio);border:1px solid var(--linha)}
 .btn.linha:hover{border-color:var(--texto-fraco);filter:none}
-.btn.perigo{background:#FBEDEB;color:var(--vermelho);border:1px solid #EFCFCA}
+.btn.perigo{background:var(--erro-fundo);color:var(--vermelho);border:1px solid var(--erro-borda)}
 .btn.pequeno{padding:5px 10px;font-size:11.5px}
 .barra-acoes{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
 .barra-acoes .espaco{flex:1}
@@ -244,7 +343,7 @@ tbody tr:hover td{background:#FCFBF8}
   background:var(--fundo);border:1px solid var(--linha-fraca);border-left:3px solid var(--amarelo);
   border-radius:7px;padding:10px 11px;margin-bottom:7px;width:100%;text-align:left;transition:.12s;
 }
-.lead:hover{border-color:var(--amarelo);background:#FFFDF7}
+.lead:hover{border-color:var(--amarelo);background:var(--realce-suave)}
 .lead .nm{font-size:12.5px;font-weight:600;color:var(--texto)}
 .lead .mt2{font-size:11px;color:var(--texto-fraco);margin-top:2px}
 .lead .vl{font-size:12px;font-weight:600;margin-top:6px;color:var(--texto-medio)}
@@ -304,11 +403,11 @@ tbody tr:hover td{background:#FCFBF8}
 
 .erro-campo{color:var(--vermelho);font-size:12px;margin-top:5px;font-weight:500}
 .aviso{
-  background:var(--amarelo-fraco);border:1px solid #F0DFAF;border-radius:9px;
+  background:var(--amarelo-fraco);border:1px solid var(--aviso-borda);border-radius:9px;
   padding:11px 13px;font-size:12.5px;color:var(--amarelo-escuro);margin-bottom:16px;line-height:1.6;
 }
-.aviso.erro{background:#FBEDEB;border-color:#EFCFCA;color:var(--vermelho)}
-.aviso.info{background:#EAF0F7;border-color:#CFDCEC;color:var(--azul)}
+.aviso.erro{background:var(--erro-fundo);border-color:var(--erro-borda);color:var(--vermelho)}
+.aviso.info{background:var(--info-fundo);border-color:var(--info-borda);color:var(--azul)}
 
 /* ===== AVISO FLUTUANTE ===== */
 .avisos{position:fixed;bottom:22px;right:22px;z-index:120;display:flex;flex-direction:column;gap:9px}
@@ -346,3 +445,36 @@ tbody tr:hover td{background:#FCFBF8}
   .funil{grid-template-columns:1fr}
   .coluna{min-height:auto}
 }
+
+/* ===== ALTERNADOR DE TEMA ===== */
+/* Na tela de entrada ele fica no canto da caixa, discreto */
+.caixa-login{position:relative}
+.tema-canto{
+  position:absolute;top:14px;right:14px;
+  width:34px;height:34px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;line-height:1;
+  border:1px solid var(--linha);background:var(--fundo);transition:.12s;
+}
+.tema-canto:hover{border-color:var(--amarelo);background:var(--realce-suave)}
+
+/* Na barra lateral ele acompanha o "Sair do sistema" */
+#botao-tema{display:flex;align-items:center;gap:7px}
+
+/* ===== FUNIL: ARRASTAR ENTRE ETAPAS (RF-01) ===== */
+.coluna-itens{min-height:60px}
+.coluna-vazia{font-size:11.5px;color:var(--texto-fraco);padding:8px 0}
+
+.lead[draggable="true"]{cursor:grab}
+.lead[draggable="true"]:active{cursor:grabbing}
+
+/* O cartão que está na mão fica apagado, para a atenção ir ao destino */
+.lead.arrastando{opacity:.4}
+
+/* A coluna que vai receber se acende */
+.coluna.alvo{
+  border-color:var(--amarelo-escuro);
+  background:var(--amarelo-fraco);
+  box-shadow:inset 0 0 0 2px var(--amarelo);
+}
+.coluna{transition:background .12s, border-color .12s}

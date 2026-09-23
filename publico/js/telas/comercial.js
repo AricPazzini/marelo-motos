@@ -36,6 +36,13 @@ const ETAPAS_SEGUINTES = {
   financiamento: null, // daqui so sai fechando a venda
 };
 
+const ETAPA_ANTERIOR = {
+  contato: 'lead',
+  proposta: 'contato',
+  financiamento: 'proposta',
+  perdida: 'contato', // retomar um cliente que tinha desistido
+};
+
 async function montarFunil(area, contexto) {
   const { colunas } = await api.ler('/api/funil');
   const podeEditar = contexto.permissoes['comercial.escrever'];
@@ -46,19 +53,28 @@ async function montarFunil(area, contexto) {
         ? `${escapar(item.numero)} · ${escapar(item.marca || '')} ${escapar(item.modelo || '')}`
         : `${escapar(item.marca || '')} ${escapar(item.modelo || 'moto a definir')} · ${escapar(item.vendedor_nome)}`;
 
+      // So o que ainda esta em negociacao pode ser arrastado: venda
+      // fechada nao volta de etapa, porque ja tem contrato emitido.
+      const arrastavel = podeEditar && coluna.etapa !== 'fechada';
+
       return `
-        <button class="lead" data-negociacao="${item.id}" data-etapa="${escapar(coluna.etapa)}">
+        <button class="lead" data-negociacao="${item.id}" data-etapa="${escapar(coluna.etapa)}"
+                ${arrastavel ? 'draggable="true"' : ''}>
           <div class="nm">${escapar(item.cliente_nome)}</div>
           <div class="mt2">${detalhe}</div>
           <div class="vl">${dinheiro(item.valor_negociado)}</div>
         </button>`;
     }).join('');
 
+    const recebe = podeEditar && coluna.etapa !== 'fechada';
+
     return `
-      <div class="coluna">
+      <div class="coluna${recebe ? ' recebe' : ''}" data-etapa="${escapar(coluna.etapa)}">
         <h4>${escapar(rotulo(coluna.etapa))}</h4>
         <div class="qtd">${coluna.quantidade} · ${dinheiro(coluna.valor)}</div>
-        ${itens || '<p style="font-size:11.5px;color:var(--texto-fraco);padding:8px 0">Nenhuma negociação.</p>'}
+        <div class="coluna-itens">
+          ${itens || '<p class="coluna-vazia">Nenhuma negociação.</p>'}
+        </div>
       </div>`;
   }).join('');
 
@@ -76,7 +92,9 @@ async function montarFunil(area, contexto) {
       ${podeEditar ? '<button class="btn linha" id="novo-cliente">+ Novo cliente</button>' : ''}
       <span class="espaco"></span>
       <span style="font-size:12px;color:var(--texto-fraco)">
-        Clique em uma negociação para ver o histórico e avançar de etapa.
+        ${podeEditar
+          ? 'Arraste o cliente de uma coluna para a outra, ou clique nele para ver o histórico.'
+          : 'Clique em uma negociação para ver o histórico.'}
       </span>
     </div>
 
@@ -92,6 +110,75 @@ async function montarFunil(area, contexto) {
         return;
       }
       abrirNegociacao(cartao.dataset.negociacao, podeEditar);
+    });
+  }
+
+  if (podeEditar) ligarArrastar(area);
+}
+
+// ---------------------------------------------------------------------
+// Arrastar o cliente de uma etapa para a outra
+//
+// E o gesto que a maioria espera de um funil. Como arrastar nao funciona
+// no teclado nem no celular, o caminho por clique continua valendo: o
+// cartao abre o detalhe, que tem o seletor de etapa.
+// ---------------------------------------------------------------------
+function ligarArrastar(area) {
+  let arrastando = null;
+
+  for (const cartao of area.querySelectorAll('.lead[draggable="true"]')) {
+    cartao.addEventListener('dragstart', (evento) => {
+      arrastando = cartao;
+      cartao.classList.add('arrastando');
+      evento.dataTransfer.effectAllowed = 'move';
+      // Alguns navegadores so iniciam o arrasto se houver dado anexado
+      evento.dataTransfer.setData('text/plain', cartao.dataset.negociacao);
+    });
+    cartao.addEventListener('dragend', () => {
+      cartao.classList.remove('arrastando');
+      arrastando = null;
+      for (const c of area.querySelectorAll('.coluna')) c.classList.remove('alvo');
+    });
+  }
+
+  for (const coluna of area.querySelectorAll('.coluna.recebe')) {
+    coluna.addEventListener('dragover', (evento) => {
+      if (!arrastando || arrastando.dataset.etapa === coluna.dataset.etapa) return;
+      evento.preventDefault(); // sem isto o navegador recusa o "soltar"
+      evento.dataTransfer.dropEffect = 'move';
+      coluna.classList.add('alvo');
+    });
+
+    coluna.addEventListener('dragleave', (evento) => {
+      // sair para um filho da propria coluna nao conta como sair
+      if (!coluna.contains(evento.relatedTarget)) coluna.classList.remove('alvo');
+    });
+
+    coluna.addEventListener('drop', async (evento) => {
+      evento.preventDefault();
+      coluna.classList.remove('alvo');
+      if (!arrastando) return;
+
+      const id = arrastando.dataset.negociacao;
+      const de = arrastando.dataset.etapa;
+      const para = coluna.dataset.etapa;
+      if (de === para) return;
+
+      // "Perdida" pede o motivo — e o dado que alimenta o relatorio de
+      // perda, entao nao pode ser preenchido sozinho.
+      let motivo;
+      if (para === 'perdida') {
+        motivo = await perguntarMotivo();
+        if (motivo === null) return;
+      }
+
+      try {
+        await api.alterar(`/api/negociacoes/${id}/etapa`, { etapa: para, motivo });
+        recado(`Movido para "${rotulo(para)}".`);
+        recarregar();
+      } catch (erro) {
+        recado(erro.message, 'erro');
+      }
     });
   }
 }
@@ -117,6 +204,21 @@ async function abrirNegociacao(id, podeEditar) {
         aoClicar: async () => {
           await api.alterar(`/api/negociacoes/${id}/etapa`, { etapa: proxima });
           recado(`Negociação movida para ${rotulo(proxima)}.`);
+          recarregar();
+        },
+      });
+    }
+    // Negociação também anda para trás: o cliente que pediu proposta e
+    // sumiu volta para "em contato". No funil isso se faz arrastando;
+    // aqui é o caminho de quem usa teclado ou celular.
+    const anterior = ETAPA_ANTERIOR[n.etapa];
+    if (anterior) {
+      acoes.push({
+        texto: `Voltar para "${rotulo(anterior)}"`,
+        estilo: 'linha',
+        aoClicar: async () => {
+          await api.alterar(`/api/negociacoes/${id}/etapa`, { etapa: anterior });
+          recado(`Negociação voltou para ${rotulo(anterior)}.`);
           recarregar();
         },
       });
@@ -311,7 +413,7 @@ async function abrirNovaNegociacao() {
 
   janela({
     titulo: 'Nova negociação',
-    descricao: 'A negociação entra no funil na etapa "Lead novo".',
+    descricao: 'Escolha em que etapa do funil o cliente entra.',
     corpo: `
       <div class="campo">
         <label for="clienteId">Cliente</label>
@@ -330,6 +432,16 @@ async function abrirNovaNegociacao() {
         </select>
       </div>
       <div class="campo">
+        <label for="etapa">Etapa do funil</label>
+        <select name="etapa" id="etapa">
+          <option value="lead">Lead novo — acabou de chegar</option>
+          <option value="contato">Em contato — já conversamos</option>
+          <option value="proposta">Proposta — já enviada</option>
+          <option value="financiamento">Financiamento — em análise no banco</option>
+        </select>
+        <p class="dica">Dá para mover depois arrastando o cliente entre as colunas.</p>
+      </div>
+      <div class="campo">
         <label for="valorNegociado">Valor negociado</label>
         <input type="number" step="0.01" name="valorNegociado" id="valorNegociado" value="0">
         <p class="dica">Preenchido com o preço de tabela ao escolher a moto; ajuste se houver desconto.</p>
@@ -344,6 +456,7 @@ async function abrirNovaNegociacao() {
             clienteId: Number(dados.clienteId),
             motoId: dados.motoId ? Number(dados.motoId) : null,
             valorNegociado: Number(dados.valorNegociado) || 0,
+            etapa: dados.etapa,
           });
           recado('Negociação criada no funil.');
           recarregar();

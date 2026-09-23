@@ -384,16 +384,27 @@ rota('POST', '/api/negociacoes', 'comercial.escrever', ({ corpo, usuario }) => {
   const moto = corpo.motoId ? um('SELECT * FROM moto WHERE id = ?', corpo.motoId) : null;
   const valor = Number(corpo.valorNegociado) || (moto ? moto.preco_venda : 0);
 
+  // A negociacao pode nascer em qualquer etapa aberta do funil: quem
+  // cadastra um cliente que ja chegou pedindo proposta nao deveria
+  // precisar avancar tres vezes depois. "fechada" fica de fora — ali so
+  // se chega pelo fechamento da venda, que gera contrato e parcelas.
+  const ETAPAS_DE_ENTRADA = ['lead', 'contato', 'proposta', 'financiamento'];
+  const etapa = corpo.etapa || 'lead';
+  if (!ETAPAS_DE_ENTRADA.includes(etapa)) {
+    throw new ErroDeRegra(
+      'Etapa invalida para abrir a negociacao. A venda fechada e registrada pelo fechamento.');
+  }
+
   const r = executar(
     `INSERT INTO negociacao (cliente_id, moto_id, vendedor_id, etapa, valor_negociado)
-     VALUES (?, ?, ?, 'lead', ?)`,
-    corpo.clienteId, corpo.motoId || null, vendedorId, valor
+     VALUES (?, ?, ?, ?, ?)`,
+    corpo.clienteId, corpo.motoId || null, vendedorId, etapa, valor
   );
   const id = Number(r.lastInsertRowid);
   executar(
     `INSERT INTO negociacao_historico (negociacao_id, etapa_de, etapa_para, usuario_id, responsavel)
-     VALUES (?, NULL, 'lead', ?, ?)`,
-    id, usuario.id, usuario.nome
+     VALUES (?, NULL, ?, ?, ?)`,
+    id, etapa, usuario.id, usuario.nome
   );
   return { id };
 });

@@ -29,7 +29,7 @@ const NAVEGADORES = [
 // Cada item vira uma figura da secao 6.2 da documentacao
 const TELAS = [
   { arquivo: '01-login',            entrar: null,          hash: null,                  titulo: 'Tela de entrada' },
-  { arquivo: '02-painel-dono',      entrar: 'dono',        hash: 'painel',              titulo: 'Area do Dono' },
+  { arquivo: '02-painel-dono',      entrar: 'dono',        hash: 'painel',              titulo: 'Dashboard' },
   { arquivo: '03-comercial-funil',  entrar: 'dono',        hash: 'comercial/funil',     titulo: 'Funil de vendas' },
   { arquivo: '04-comercial-clientes', entrar: 'dono',      hash: 'comercial/clientes',  titulo: 'Cadastro de clientes' },
   { arquivo: '05-comercial-sac',    entrar: 'dono',        hash: 'comercial/sac',       titulo: 'SAC - pos-venda' },
@@ -47,6 +47,7 @@ const TELAS = [
   { arquivo: '15-meu-painel',       entrar: 'vendedor',    hash: 'meu-painel',          titulo: 'Painel do vendedor' },
   { arquivo: '16-vendedor-comercial', entrar: 'vendedor',  hash: 'comercial/funil',     titulo: 'Funil visto pelo vendedor' },
   { arquivo: '17-vendedor-estoque', entrar: 'vendedor',    hash: 'estoque/patio',       titulo: 'Estoque so de consulta' },
+  { arquivo: '27-modo-escuro',      entrar: 'dono',        hash: 'painel',              titulo: 'Dashboard no modo escuro', tema: 'escuro' },
   { arquivo: '18-financeiro-setor', entrar: 'financeiro',  hash: 'financeiro/cobranca', titulo: 'Cobranca pelo setor financeiro' },
 ];
 
@@ -82,6 +83,19 @@ const browser = await puppeteer.launch({
 const pagina = await browser.newPage();
 let perfilAtual = null;
 
+// As figuras da documentacao saem no tema claro, que e o padrao impresso.
+// Sem isto elas saem escuras quando o Windows esta no modo escuro.
+await pagina.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+
+// Aplica um tema a pagina que ja esta aberta
+async function usarTema(tema) {
+  await pagina.evaluate((t) => {
+    if (t === 'sistema') { document.documentElement.removeAttribute('data-tema'); localStorage.removeItem('marelo_tema'); }
+    else { document.documentElement.setAttribute('data-tema', t); localStorage.setItem('marelo_tema', t); }
+  }, tema);
+  await esperar(250);
+}
+
 async function entrarComo(perfil) {
   if (perfilAtual === perfil) return;
   await pagina.goto(`${ENDERECO}/index.html`, { waitUntil: 'networkidle0' });
@@ -103,6 +117,7 @@ try {
       await entrarComo(tela.entrar);
       await pagina.evaluate((h) => { window.location.hash = h; }, tela.hash);
       await esperar(700); // deixa a tela terminar de montar
+      if (tela.tema) await usarTema(tela.tema);
       if (tela.busca) {
         await pagina.type('#busca-global', tela.busca);
         await esperar(900); // espera a consulta voltar
@@ -115,6 +130,7 @@ try {
 
     // Limpa a busca, senao o texto e o painel de resultados sobram nas
     // telas seguintes e aparecem em figuras onde nao deveriam.
+    if (tela.tema) await usarTema('claro');
     if (tela.busca) {
       await pagina.evaluate(() => {
         const campo = document.getElementById('busca-global');

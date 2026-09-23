@@ -6,6 +6,13 @@
 <title>Marelo Motos — Sistema de Gestão</title>
 <link rel="stylesheet" href="./css/estilo.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23FECC4D'/><text y='23' x='7' font-size='18' font-family='sans-serif' font-weight='bold'>M</text></svg>">
+<script>
+  // Aplica o tema salvo antes de desenhar, para a tela nao piscar branca
+  try {
+    var t = localStorage.getItem("marelo_tema");
+    if (t) document.documentElement.setAttribute("data-tema", t);
+  } catch (e) {}
+</script>
 </head>
 <body>
 
@@ -27,6 +34,7 @@
     <nav class="menu" id="menu" aria-label="Módulos do sistema"></nav>
 
     <div class="rodape-side">
+      <button id="botao-tema" type="button">Modo escuro</button>
       <button id="botao-sair">Sair do sistema</button>
     </div>
   </aside>

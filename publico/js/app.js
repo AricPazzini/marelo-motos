@@ -7,6 +7,7 @@
 // =====================================================================
 
 import { api, recado, carregando, semPermissao, escapar } from './nucleo.js';
+import { ligarBotaoTema } from './tema.js';
 
 import * as painel      from './telas/painel.js';
 import * as meuPainel   from './telas/meu-painel.js';
@@ -20,7 +21,7 @@ import * as ajustes     from './telas/ajustes.js';
 // Modulos do sistema
 // ---------------------------------------------------------------------
 const MODULOS = [
-  { id: 'painel',     nome: 'Área do Dono',    icone: '📊', permissao: 'painel.gerencial', tela: painel },
+  { id: 'painel',     nome: 'Dashboard',       icone: '📊', permissao: 'painel.gerencial', tela: painel },
   { id: 'meu-painel', nome: 'Meu Painel',      icone: '🎯', permissao: 'livre',            tela: meuPainel, sePerfil: 'funcionario' },
   { id: 'comercial',  nome: 'Comercial',       icone: '🤝', permissao: 'comercial.ler',    tela: comercial },
   { id: 'estoque',    nome: 'Estoque',         icone: '🏍️', permissao: 'estoque.ler',      tela: estoque },
@@ -65,6 +66,7 @@ async function iniciar() {
   document.getElementById('pilula-loja').textContent = sessao.loja.cidade || 'Itapetininga — SP';
 
   montarMenu();
+  ligarBotaoTema(document.getElementById('botao-tema'));
 
   window.addEventListener('hashchange', abrirDoEndereco);
   abrirDoEndereco();
