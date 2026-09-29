@@ -50,7 +50,7 @@ async function lerCorpo(req) {
   try {
     return JSON.parse(Buffer.concat(partes).toString('utf8'));
   } catch {
-    throw new ErroDeRegra('Os dados enviados nao estao em um formato valido.');
+    throw new ErroDeRegra('Os dados enviados não estao em um formato válido.');
   }
 }
 

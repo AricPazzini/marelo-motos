@@ -75,7 +75,7 @@ export function fecharVenda(dados, usuario) {
 
   const formasAceitas = ['avista', 'financiado', 'entrada_parcelas'];
   if (!formasAceitas.includes(formaPagamento)) {
-    throw new ErroDeRegra('Forma de pagamento invalida.');
+    throw new ErroDeRegra('Forma de pagamento inválida.');
   }
 
   const total = Number(valorTotal);
@@ -83,7 +83,7 @@ export function fecharVenda(dados, usuario) {
   const parcelas = formaPagamento === 'avista' ? 1 : Number(qtdParcelas);
 
   if (!(total > 0)) throw new ErroDeRegra('O valor total da venda deve ser maior que zero.');
-  if (entrada < 0 || entrada > total) throw new ErroDeRegra('A entrada nao pode ser maior que o valor da venda.');
+  if (entrada < 0 || entrada > total) throw new ErroDeRegra('A entrada não pode ser maior que o valor da venda.');
   if (!(parcelas >= 1 && parcelas <= 48)) throw new ErroDeRegra('A quantidade de parcelas deve ficar entre 1 e 48.');
 
   return emTransacao((banco) => {
@@ -91,12 +91,12 @@ export function fecharVenda(dados, usuario) {
       .prepare('SELECT * FROM negociacao WHERE id = ?')
       .get(negociacaoId);
 
-    if (!negociacao) throw new ErroDeRegra('Negociacao nao encontrada.');
-    if (negociacao.etapa === 'fechada') throw new ErroDeRegra('Esta negociacao ja foi fechada.');
+    if (!negociacao) throw new ErroDeRegra('Negociação não encontrada.');
+    if (negociacao.etapa === 'fechada') throw new ErroDeRegra('Esta negociação já foi fechada.');
     if (!negociacao.moto_id) throw new ErroDeRegra('Selecione a motocicleta antes de fechar a venda.');
 
     const moto = banco.prepare('SELECT * FROM moto WHERE id = ?').get(negociacao.moto_id);
-    if (!moto) throw new ErroDeRegra('Motocicleta nao encontrada.');
+    if (!moto) throw new ErroDeRegra('Motocicleta não encontrada.');
     if (moto.situacao === 'vendida') throw new ErroDeRegra(`A moto ${moto.codigo} ja consta como vendida.`);
 
     // 1. contrato

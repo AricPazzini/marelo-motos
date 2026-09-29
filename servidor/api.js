@@ -39,7 +39,7 @@ export { pode, permissoesDe, entrar, sair, usuarioDaSessao };
 // =====================================================================
 rota('POST', '/api/login', null, ({ corpo }) => {
   const sessao = entrar(corpo.email, corpo.senha);
-  if (!sessao) throw new ErroDeRegra('E-mail ou senha invalidos.');
+  if (!sessao) throw new ErroDeRegra('E-mail ou senha inválidos.');
   return sessao;
 });
 
@@ -286,12 +286,12 @@ rota('GET', '/api/clientes', 'comercial.ler', ({ usuario, query }) => {
 rota('POST', '/api/clientes', 'comercial.escrever', ({ corpo, usuario }) => {
   const nome = String(corpo.nome || '').trim();
   if (nome.length < 3) throw new ErroDeRegra('Informe o nome completo do cliente.');
-  if (!cpfValido(corpo.cpf)) throw new ErroDeRegra('CPF invalido. Confira os numeros digitados.');
+  if (!cpfValido(corpo.cpf)) throw new ErroDeRegra('CPF inválido. Confira os números digitados.');
   if (!telefoneValido(corpo.telefone)) throw new ErroDeRegra('Informe um telefone com DDD.');
 
   const cpf = formatarCpf(corpo.cpf);
   if (um('SELECT id FROM cliente WHERE cpf = ?', cpf)) {
-    throw new ErroDeRegra('Ja existe um cliente cadastrado com este CPF.');
+    throw new ErroDeRegra('Já existe um cliente cadastrado com este CPF.');
   }
 
   // o vendedor cadastra sempre na propria carteira; o dono escolhe
@@ -309,8 +309,8 @@ rota('POST', '/api/clientes', 'comercial.escrever', ({ corpo, usuario }) => {
 });
 
 rota('PUT', '/api/clientes/:id', 'comercial.escrever', ({ params, corpo }) => {
-  if (corpo.cpf && !cpfValido(corpo.cpf)) throw new ErroDeRegra('CPF invalido.');
-  if (corpo.telefone && !telefoneValido(corpo.telefone)) throw new ErroDeRegra('Telefone invalido.');
+  if (corpo.cpf && !cpfValido(corpo.cpf)) throw new ErroDeRegra('CPF inválido.');
+  if (corpo.telefone && !telefoneValido(corpo.telefone)) throw new ErroDeRegra('Telefone inválido.');
   executar(
     `UPDATE cliente SET nome = ?, telefone = ?, email = ?, cidade = ?, origem = ?, observacao = ?
       WHERE id = ?`,
@@ -416,8 +416,8 @@ rota('PUT', '/api/negociacoes/:id/etapa', 'comercial.escrever', ({ params, corpo
     throw new ErroDeRegra('Para a etapa "venda fechada" use o fechamento da venda, que gera o contrato.');
   }
   const atual = um('SELECT * FROM negociacao WHERE id = ?', params[0]);
-  if (!atual) throw new ErroDeRegra('Negociacao nao encontrada.');
-  if (atual.etapa === 'fechada') throw new ErroDeRegra('Negociacao ja fechada nao volta de etapa.');
+  if (!atual) throw new ErroDeRegra('Negociação não encontrada.');
+  if (atual.etapa === 'fechada') throw new ErroDeRegra('Negociação já fechada não volta de etapa.');
 
   executar(
     `UPDATE negociacao SET etapa = ?, motivo_perda = ?, atualizado_em = datetime('now','localtime')
@@ -442,7 +442,7 @@ rota('GET', '/api/negociacoes/:id', 'comercial.ler', ({ params }) => {
        LEFT JOIN moto m ON m.id = n.moto_id
        JOIN funcionario f ON f.id = n.vendedor_id
       WHERE n.id = ?`, params[0]);
-  if (!negociacao) throw new ErroDeRegra('Negociacao nao encontrada.');
+  if (!negociacao) throw new ErroDeRegra('Negociação não encontrada.');
   negociacao.historico = todos(
     'SELECT * FROM negociacao_historico WHERE negociacao_id = ? ORDER BY momento', params[0]);
   return negociacao;
@@ -513,7 +513,7 @@ rota('POST', '/api/estoque', 'estoque.escrever', ({ corpo }) => {
     if (!String(corpo[campo] || '').trim()) throw new ErroDeRegra(`Preencha o campo ${campo}.`);
   }
   if (um('SELECT id FROM moto WHERE codigo = ?', corpo.codigo)) {
-    throw new ErroDeRegra('Ja existe uma moto com este codigo interno.');
+    throw new ErroDeRegra('Já existe uma moto com este código interno.');
   }
   if (Number(corpo.precoVenda) < Number(corpo.custo)) {
     throw new ErroDeRegra('O preco de venda esta abaixo do custo. Confira os valores.');
@@ -532,8 +532,8 @@ rota('POST', '/api/estoque', 'estoque.escrever', ({ corpo }) => {
 
 rota('PUT', '/api/estoque/:id', 'estoque.escrever', ({ params, corpo }) => {
   const moto = um('SELECT * FROM moto WHERE id = ?', params[0]);
-  if (!moto) throw new ErroDeRegra('Moto nao encontrada.');
-  if (moto.situacao === 'vendida') throw new ErroDeRegra('Moto ja vendida nao pode ser alterada.');
+  if (!moto) throw new ErroDeRegra('Moto não encontrada.');
+  if (moto.situacao === 'vendida') throw new ErroDeRegra('Moto já vendida não pode ser alterada.');
   executar(
     `UPDATE moto SET cor = ?, placa = ?, km = ?, custo = ?, preco_venda = ?, situacao = ?
       WHERE id = ?`,
@@ -612,7 +612,7 @@ rota('GET', '/api/despesas/resumo', 'financeiro.ler', () =>
 rota('POST', '/api/despesas', 'financeiro.escrever', ({ corpo }) => {
   const descricao = String(corpo.descricao || '').trim();
   const valor = Number(corpo.valor);
-  if (!descricao) throw new ErroDeRegra('Informe a descricao da despesa.');
+  if (!descricao) throw new ErroDeRegra('Informe a descrição da despesa.');
   if (!Number.isFinite(valor) || valor <= 0) {
     throw new ErroDeRegra('O valor da despesa deve ser maior que zero.');
   }
@@ -630,7 +630,7 @@ rota('POST', '/api/despesas', 'financeiro.escrever', ({ corpo }) => {
 
 rota('PUT', '/api/despesas/:id', 'financeiro.escrever', ({ params, corpo }) => {
   const despesa = um('SELECT * FROM despesa WHERE id = ?', params[0]);
-  if (!despesa) throw new ErroDeRegra('Despesa nao encontrada.', 404);
+  if (!despesa) throw new ErroDeRegra('Despesa não encontrada.', 404);
   const valor = corpo.valor === undefined ? despesa.valor : Number(corpo.valor);
   if (!Number.isFinite(valor) || valor <= 0) {
     throw new ErroDeRegra('O valor da despesa deve ser maior que zero.');
@@ -649,8 +649,8 @@ rota('PUT', '/api/despesas/:id', 'financeiro.escrever', ({ params, corpo }) => {
 
 rota('POST', '/api/despesas/:id/pagar', 'financeiro.escrever', ({ params, corpo }) => {
   const despesa = um('SELECT * FROM despesa WHERE id = ?', params[0]);
-  if (!despesa) throw new ErroDeRegra('Despesa nao encontrada.', 404);
-  if (despesa.situacao === 'paga') throw new ErroDeRegra('Esta despesa ja foi paga.');
+  if (!despesa) throw new ErroDeRegra('Despesa não encontrada.', 404);
+  if (despesa.situacao === 'paga') throw new ErroDeRegra('Esta despesa já foi paga.');
   executar(
     `UPDATE despesa SET situacao = 'paga', data_pagamento = ? WHERE id = ?`,
     corpo.data || new Date().toISOString().slice(0, 10), params[0]
@@ -681,7 +681,7 @@ rota('GET', '/api/contratos/:id', 'financeiro.ler', ({ params }) => {
       JOIN moto m ON m.id = c.moto_id
       JOIN funcionario f ON f.id = c.vendedor_id
      WHERE c.id = ?`, params[0]);
-  if (!contrato) throw new ErroDeRegra('Contrato nao encontrado.');
+  if (!contrato) throw new ErroDeRegra('Contrato não encontrado.');
   contrato.parcelas = todos(
     'SELECT * FROM vw_parcela WHERE contrato_id = ? ORDER BY numero', params[0]);
   return contrato;
@@ -690,8 +690,8 @@ rota('GET', '/api/contratos/:id', 'financeiro.ler', ({ params }) => {
 // RNFR-04.3 — somente o perfil Dono pode cancelar um contrato ja emitido.
 rota('POST', '/api/contratos/:id/cancelar', 'contrato.cancelar', ({ params, corpo, usuario }) => {
   const contrato = um('SELECT * FROM contrato WHERE id = ?', params[0]);
-  if (!contrato) throw new ErroDeRegra('Contrato nao encontrado.');
-  if (contrato.situacao === 'cancelado') throw new ErroDeRegra('Contrato ja esta cancelado.');
+  if (!contrato) throw new ErroDeRegra('Contrato não encontrado.');
+  if (contrato.situacao === 'cancelado') throw new ErroDeRegra('Contrato já esta cancelado.');
   if (!String(corpo.motivo || '').trim()) throw new ErroDeRegra('Informe o motivo do cancelamento.');
 
   executar(
@@ -715,8 +715,8 @@ rota('GET', '/api/parcelas', 'financeiro.ler', ({ query }) => {
 
 rota('POST', '/api/parcelas/:id/baixar', 'financeiro.escrever', ({ params }) => {
   const parcela = um('SELECT * FROM parcela WHERE id = ?', params[0]);
-  if (!parcela) throw new ErroDeRegra('Parcela nao encontrada.');
-  if (parcela.situacao === 'paga') throw new ErroDeRegra('Esta parcela ja esta quitada.');
+  if (!parcela) throw new ErroDeRegra('Parcela não encontrada.');
+  if (parcela.situacao === 'paga') throw new ErroDeRegra('Esta parcela já esta quitada.');
   executar(
     `UPDATE parcela SET situacao = 'paga', data_pagamento = date('now','localtime') WHERE id = ?`,
     params[0]);
@@ -736,11 +736,11 @@ rota('GET', '/api/cobranca', 'financeiro.ler', () => reguaDeCobranca());
 
 rota('POST', '/api/cobranca', 'financeiro.escrever', ({ corpo, usuario }) => {
   const tipos = ['lembrete', 'segunda_via', 'contato', 'negativacao'];
-  if (!tipos.includes(corpo.tipo)) throw new ErroDeRegra('Tipo de cobranca invalido.');
+  if (!tipos.includes(corpo.tipo)) throw new ErroDeRegra('Tipo de cobranca inválido.');
 
   // RNFR-05.2 — a negativacao depende de autorizacao expressa do proprietario.
   if (corpo.tipo === 'negativacao' && !pode(usuario, 'negativacao')) {
-    throw new ErroDeRegra('A negativacao do cliente depende da autorizacao do proprietario.');
+    throw new ErroDeRegra('A negativação do cliente depende da autorização do proprietário.');
   }
 
   executar(
@@ -798,8 +798,8 @@ rota('GET', '/api/rh/comissoes', 'livre', ({ usuario, query }) => {
 });
 
 rota('POST', '/api/rh/funcionarios', 'rh.escrever', ({ corpo }) => {
-  if (!cpfValido(corpo.cpf)) throw new ErroDeRegra('CPF invalido.');
-  if (!String(corpo.nome || '').trim()) throw new ErroDeRegra('Informe o nome do funcionario.');
+  if (!cpfValido(corpo.cpf)) throw new ErroDeRegra('CPF inválido.');
+  if (!String(corpo.nome || '').trim()) throw new ErroDeRegra('Informe o nome do funcionário.');
   const r = executar(
     `INSERT INTO funcionario (nome, cpf, cargo, setor, data_admissao, salario, percentual_comissao, meta_mensal)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
