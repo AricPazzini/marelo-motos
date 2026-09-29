@@ -1,0 +1,778 @@
+// =====================================================================
+//  Modulo Comercial
+//  RF-01 — funil de vendas e cadastro de clientes
+//  RF-02 — chamados de pos-venda (SAC)
+//  RF-04 — fechamento da venda, que gera o contrato e os boletos
+// =====================================================================
+
+import {
+  api, dinheiro, numero, tabela, etiqueta, rotulo, escapar, data,
+  janela, lerCampos, recado, confirmar, mostrarErroNaJanela, exportarCsv,
+} from '../nucleo.js';
+import { recarregar } from '../app.js';
+
+export function abas(contexto) {
+  const lista = [
+    { id: 'funil', nome: 'Funil de vendas' },
+    { id: 'clientes', nome: 'Clientes' },
+  ];
+  if (contexto.permissoes['sac.ler']) lista.push({ id: 'sac', nome: 'SAC — pós-venda' });
+  return lista;
+}
+
+export async function montar(area, contexto, aba) {
+  if (aba === 'clientes') return montarClientes(area, contexto);
+  if (aba === 'sac') return montarSac(area, contexto);
+  return montarFunil(area, contexto);
+}
+
+// =====================================================================
+//  RF-01 — FUNIL DE VENDAS
+// =====================================================================
+const ETAPAS_SEGUINTES = {
+  lead: 'contato',
+  contato: 'proposta',
+  proposta: 'financiamento',
+  financiamento: null, // daqui so sai fechando a venda
+};
+
+const ETAPA_ANTERIOR = {
+  contato: 'lead',
+  proposta: 'contato',
+  financiamento: 'proposta',
+  perdida: 'contato', // retomar um cliente que tinha desistido
+};
+
+async function montarFunil(area, contexto) {
+  const { colunas } = await api.ler('/api/funil');
+  const podeEditar = contexto.permissoes['comercial.escrever'];
+
+  const colunasHtml = colunas.map((coluna) => {
+    const itens = coluna.itens.map((item) => {
+      const detalhe = coluna.etapa === 'fechada'
+        ? `${escapar(item.numero)} · ${escapar(item.marca || '')} ${escapar(item.modelo || '')}`
+        : `${escapar(item.marca || '')} ${escapar(item.modelo || 'moto a definir')} · ${escapar(item.vendedor_nome)}`;
+
+      // So o que ainda esta em negociacao pode ser arrastado: venda
+      // fechada nao volta de etapa, porque ja tem contrato emitido.
+      const arrastavel = podeEditar && coluna.etapa !== 'fechada';
+
+      return `
+        <button class="lead" data-negociacao="${item.id}" data-etapa="${escapar(coluna.etapa)}"
+                ${arrastavel ? 'draggable="true"' : ''}>
+          <div class="nm">${escapar(item.cliente_nome)}</div>
+          <div class="mt2">${detalhe}</div>
+          <div class="vl">${dinheiro(item.valor_negociado)}</div>
+        </button>`;
+    }).join('');
+
+    const recebe = podeEditar && coluna.etapa !== 'fechada';
+
+    return `
+      <div class="coluna${recebe ? ' recebe' : ''}" data-etapa="${escapar(coluna.etapa)}">
+        <h4>${escapar(rotulo(coluna.etapa))}</h4>
+        <div class="qtd">${coluna.quantidade} · ${dinheiro(coluna.valor)}</div>
+        <div class="coluna-itens">
+          ${itens || '<p class="coluna-vazia">Nenhuma negociação.</p>'}
+        </div>
+      </div>`;
+  }).join('');
+
+  area.innerHTML = `
+    <h1 class="titulo">Comercial — funil de vendas</h1>
+    <p class="subtitulo">
+      Acompanhamento do cliente do primeiro contato até a entrega da moto.
+      ${contexto.usuario.perfil === 'dono'
+        ? 'Você enxerga a carteira de todos os vendedores.'
+        : 'Você enxerga somente os clientes da sua carteira.'}
+    </p>
+
+    <div class="barra-acoes">
+      ${podeEditar ? '<button class="btn" id="nova-negociacao">+ Nova negociação</button>' : ''}
+      ${podeEditar ? '<button class="btn linha" id="novo-cliente">+ Novo cliente</button>' : ''}
+      <span class="espaco"></span>
+      <span style="font-size:12px;color:var(--texto-fraco)">
+        ${podeEditar
+          ? 'Arraste o cliente de uma coluna para a outra, ou clique nele para ver o histórico.'
+          : 'Clique em uma negociação para ver o histórico.'}
+      </span>
+    </div>
+
+    <div class="funil">${colunasHtml}</div>`;
+
+  document.getElementById('nova-negociacao')?.addEventListener('click', () => abrirNovaNegociacao());
+  document.getElementById('novo-cliente')?.addEventListener('click', () => abrirNovoCliente());
+
+  for (const cartao of area.querySelectorAll('.lead')) {
+    cartao.addEventListener('click', () => {
+      if (cartao.dataset.etapa === 'fechada') {
+        recado('Esta venda já foi fechada. O contrato está no módulo Financeiro.');
+        return;
+      }
+      abrirNegociacao(cartao.dataset.negociacao, podeEditar);
+    });
+  }
+
+  if (podeEditar) ligarArrastar(area);
+}
+
+// ---------------------------------------------------------------------
+// Arrastar o cliente de uma etapa para a outra
+//
+// E o gesto que a maioria espera de um funil. Como arrastar nao funciona
+// no teclado nem no celular, o caminho por clique continua valendo: o
+// cartao abre o detalhe, que tem o seletor de etapa.
+// ---------------------------------------------------------------------
+function ligarArrastar(area) {
+  let arrastando = null;
+
+  for (const cartao of area.querySelectorAll('.lead[draggable="true"]')) {
+    cartao.addEventListener('dragstart', (evento) => {
+      arrastando = cartao;
+      cartao.classList.add('arrastando');
+      evento.dataTransfer.effectAllowed = 'move';
+      // Alguns navegadores so iniciam o arrasto se houver dado anexado
+      evento.dataTransfer.setData('text/plain', cartao.dataset.negociacao);
+    });
+    cartao.addEventListener('dragend', () => {
+      cartao.classList.remove('arrastando');
+      arrastando = null;
+      for (const c of area.querySelectorAll('.coluna')) c.classList.remove('alvo');
+    });
+  }
+
+  for (const coluna of area.querySelectorAll('.coluna.recebe')) {
+    coluna.addEventListener('dragover', (evento) => {
+      if (!arrastando || arrastando.dataset.etapa === coluna.dataset.etapa) return;
+      evento.preventDefault(); // sem isto o navegador recusa o "soltar"
+      evento.dataTransfer.dropEffect = 'move';
+      coluna.classList.add('alvo');
+    });
+
+    coluna.addEventListener('dragleave', (evento) => {
+      // sair para um filho da propria coluna nao conta como sair
+      if (!coluna.contains(evento.relatedTarget)) coluna.classList.remove('alvo');
+    });
+
+    coluna.addEventListener('drop', async (evento) => {
+      evento.preventDefault();
+      coluna.classList.remove('alvo');
+      if (!arrastando) return;
+
+      const id = arrastando.dataset.negociacao;
+      const de = arrastando.dataset.etapa;
+      const para = coluna.dataset.etapa;
+      if (de === para) return;
+
+      // "Perdida" pede o motivo — e o dado que alimenta o relatorio de
+      // perda, entao nao pode ser preenchido sozinho.
+      let motivo;
+      if (para === 'perdida') {
+        motivo = await perguntarMotivo();
+        if (motivo === null) return;
+      }
+
+      try {
+        await api.alterar(`/api/negociacoes/${id}/etapa`, { etapa: para, motivo });
+        recado(`Movido para "${rotulo(para)}".`);
+        recarregar();
+      } catch (erro) {
+        recado(erro.message, 'erro');
+      }
+    });
+  }
+}
+
+// Detalhe da negociacao, com o historico exigido pelo RF-01
+async function abrirNegociacao(id, podeEditar) {
+  const n = await api.ler(`/api/negociacoes/${id}`);
+  const proxima = ETAPAS_SEGUINTES[n.etapa];
+
+  const historico = n.historico.map((h) => `
+    <li>
+      <span>${escapar(h.etapa_de ? rotulo(h.etapa_de) : 'Início')} → <b>${escapar(rotulo(h.etapa_para))}</b></span>
+      <span style="font-size:11.5px;color:var(--texto-fraco)">
+        ${data(h.momento)} · ${escapar(h.responsavel || '—')}
+      </span>
+    </li>`).join('');
+
+  const acoes = [];
+  if (podeEditar) {
+    if (proxima) {
+      acoes.push({
+        texto: `Avançar para "${rotulo(proxima)}"`,
+        aoClicar: async () => {
+          await api.alterar(`/api/negociacoes/${id}/etapa`, { etapa: proxima });
+          recado(`Negociação movida para ${rotulo(proxima)}.`);
+          recarregar();
+        },
+      });
+    }
+    // Negociação também anda para trás: o cliente que pediu proposta e
+    // sumiu volta para "em contato". No funil isso se faz arrastando;
+    // aqui é o caminho de quem usa teclado ou celular.
+    const anterior = ETAPA_ANTERIOR[n.etapa];
+    if (anterior) {
+      acoes.push({
+        texto: `Voltar para "${rotulo(anterior)}"`,
+        estilo: 'linha',
+        aoClicar: async () => {
+          await api.alterar(`/api/negociacoes/${id}/etapa`, { etapa: anterior });
+          recado(`Negociação voltou para ${rotulo(anterior)}.`);
+          recarregar();
+        },
+      });
+    }
+    acoes.push({
+      texto: 'Fechar a venda',
+      aoClicar: ({ fechar }) => { fechar(); abrirFechamento(n); return 'manter'; },
+    });
+    acoes.push({
+      texto: 'Marcar como perdida',
+      estilo: 'perigo',
+      aoClicar: async ({ fechar }) => {
+        fechar();
+        const motivo = await perguntarMotivo();
+        if (motivo === null) return 'manter';
+        await api.alterar(`/api/negociacoes/${id}/etapa`, { etapa: 'perdida', motivo });
+        recado('Negociação marcada como perdida.');
+        recarregar();
+        return 'manter';
+      },
+    });
+  }
+  acoes.push({ texto: 'Fechar', estilo: 'linha' });
+
+  janela({
+    titulo: n.cliente_nome,
+    descricao: `${n.telefone || 'sem telefone'} · CPF ${n.cpf} · vendedor: ${n.vendedor_nome}`,
+    largo: true,
+    corpo: `
+      <div class="grade g2">
+        <div>
+          <h3 style="font-size:12px;color:var(--texto-fraco);text-transform:uppercase;margin-bottom:12px">Negociação</h3>
+          <ul class="lista-simples">
+            <li><span>Etapa atual</span>${etiqueta(n.etapa)}</li>
+            <li><span>Moto de interesse</span><b>${escapar(n.moto_codigo || '—')} ${escapar(n.modelo || '')}</b></li>
+            <li><span>Ano / cor</span><b>${escapar(n.ano || '—')} · ${escapar(n.cor || '—')}</b></li>
+            <li><span>Preço de tabela</span><b>${dinheiro(n.preco_venda)}</b></li>
+            <li><span>Valor negociado</span><b>${dinheiro(n.valor_negociado)}</b></li>
+          </ul>
+        </div>
+        <div>
+          <h3 style="font-size:12px;color:var(--texto-fraco);text-transform:uppercase;margin-bottom:12px">
+            Histórico do funil
+          </h3>
+          <ul class="lista-simples">${historico}</ul>
+        </div>
+      </div>`,
+    acoes,
+  });
+}
+
+function perguntarMotivo() {
+  return new Promise((resolve) => {
+    janela({
+      titulo: 'Por que a negociação foi perdida?',
+      corpo: `
+        <div class="campo">
+          <label for="motivo">Motivo</label>
+          <select name="motivo" id="motivo">
+            <option>Cliente fechou com a concorrência</option>
+            <option>Crédito não aprovado</option>
+            <option>Desistiu da compra</option>
+            <option>Não encontramos a moto procurada</option>
+            <option>Sem retorno do cliente</option>
+          </select>
+        </div>`,
+      acoes: [
+        { texto: 'Cancelar', estilo: 'linha', aoClicar: () => resolve(null) },
+        { texto: 'Confirmar', estilo: 'perigo', aoClicar: ({ fundo }) => resolve(lerCampos(fundo).motivo) },
+      ],
+    });
+  });
+}
+
+// ---------------------------------------------------------------------
+// RF-04 — fechamento da venda
+// ---------------------------------------------------------------------
+function abrirFechamento(n) {
+  const { fundo } = janela({
+    titulo: 'Fechar a venda',
+    descricao: `${n.cliente_nome} · ${n.moto_codigo || ''} ${n.modelo || ''}`,
+    corpo: `
+      <div class="aviso info">
+        Ao confirmar, o sistema gera o contrato com número sequencial, cria as
+        parcelas da condição escolhida e dá baixa da moto no estoque — tudo de
+        uma vez só.
+      </div>
+
+      <div class="campo">
+        <label for="formaPagamento">Forma de pagamento</label>
+        <select name="formaPagamento" id="formaPagamento">
+          <option value="avista">À vista</option>
+          <option value="financiado" selected>Financiado pelo banco</option>
+          <option value="entrada_parcelas">Entrada + parcelas na loja</option>
+        </select>
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="valorTotal">Valor total da venda</label>
+          <input type="number" step="0.01" name="valorTotal" id="valorTotal" value="${n.valor_negociado}">
+        </div>
+        <div class="campo">
+          <label for="valorEntrada">Entrada</label>
+          <input type="number" step="0.01" name="valorEntrada" id="valorEntrada" value="0">
+        </div>
+      </div>
+
+      <div class="linha-campos" id="bloco-parcelas">
+        <div class="campo">
+          <label for="qtdParcelas">Quantidade de parcelas</label>
+          <select name="qtdParcelas" id="qtdParcelas">
+            ${[6, 12, 18, 24, 36, 48].map((q) => `<option value="${q}"${q === 24 ? ' selected' : ''}>${q}x</option>`).join('')}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="banco">Banco</label>
+          <select name="banco" id="banco">
+            <option value="">— não se aplica —</option>
+            <option>Banco Pan</option>
+            <option>Santander</option>
+            <option>Itaú</option>
+            <option>Bradesco</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="aviso" id="previa">Escolha a condição para ver a simulação.</div>`,
+    acoes: [
+      { texto: 'Cancelar', estilo: 'linha' },
+      {
+        texto: 'Confirmar e gerar contrato',
+        aoClicar: async ({ fundo: f }) => {
+          const dados = lerCampos(f);
+          const resultado = await api.criar(`/api/negociacoes/${n.id}/fechar`, {
+            formaPagamento: dados.formaPagamento,
+            valorTotal: Number(dados.valorTotal),
+            valorEntrada: Number(dados.valorEntrada) || 0,
+            qtdParcelas: Number(dados.qtdParcelas),
+            banco: dados.banco || null,
+          });
+          recado(`Venda fechada! Contrato ${resultado.numero} gerado com ${resultado.parcelas} parcela(s).`);
+          recarregar();
+        },
+      },
+    ],
+  });
+
+  // Simulacao ao vivo das parcelas
+  const atualizarPrevia = () => {
+    const dados = lerCampos(fundo);
+    const total = Number(dados.valorTotal) || 0;
+    const entrada = Number(dados.valorEntrada) || 0;
+    const aVista = dados.formaPagamento === 'avista';
+    const parcelas = aVista ? 1 : Number(dados.qtdParcelas) || 1;
+    const previa = fundo.querySelector('#previa');
+    const blocoParcelas = fundo.querySelector('#bloco-parcelas');
+
+    blocoParcelas.style.display = aVista ? 'none' : '';
+
+    if (entrada > total) {
+      previa.className = 'aviso erro';
+      previa.textContent = 'A entrada não pode ser maior que o valor da venda.';
+      return;
+    }
+
+    previa.className = 'aviso';
+    previa.innerHTML = aVista
+      ? `Pagamento único de <b>${dinheiro(total)}</b>, quitado no ato da emissão do contrato.`
+      : `Entrada de <b>${dinheiro(entrada)}</b> + <b>${parcelas}x</b> de
+         <b>${dinheiro((total - entrada) / parcelas)}</b>.
+         Primeiro vencimento em 30 dias.`;
+  };
+
+  for (const campo of fundo.querySelectorAll('[name]')) {
+    campo.addEventListener('input', atualizarPrevia);
+    campo.addEventListener('change', atualizarPrevia);
+  }
+  atualizarPrevia();
+}
+
+// ---------------------------------------------------------------------
+// Nova negociacao
+// ---------------------------------------------------------------------
+async function abrirNovaNegociacao() {
+  const listas = await api.ler('/api/apoio/listas');
+
+  if (!listas.clientes.length) {
+    recado('Cadastre um cliente antes de abrir uma negociação.', 'erro');
+    return abrirNovoCliente();
+  }
+
+  janela({
+    titulo: 'Nova negociação',
+    descricao: 'Escolha em que etapa do funil o cliente entra.',
+    corpo: `
+      <div class="campo">
+        <label for="clienteId">Cliente</label>
+        <select name="clienteId" id="clienteId">
+          ${listas.clientes.map((c) => `<option value="${c.id}">${escapar(c.nome)} — ${escapar(c.cpf)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="motoId">Moto de interesse</label>
+        <select name="motoId" id="motoId">
+          <option value="">— ainda não definida —</option>
+          ${listas.motosDisponiveis.map((m) =>
+            `<option value="${m.id}" data-preco="${m.preco_venda}">
+               ${escapar(m.codigo)} · ${escapar(m.marca)} ${escapar(m.modelo)} ${m.ano} — ${dinheiro(m.preco_venda)}
+             </option>`).join('')}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="etapa">Etapa do funil</label>
+        <select name="etapa" id="etapa">
+          <option value="lead">Lead novo — acabou de chegar</option>
+          <option value="contato">Em contato — já conversamos</option>
+          <option value="proposta">Proposta — já enviada</option>
+          <option value="financiamento">Financiamento — em análise no banco</option>
+        </select>
+        <p class="dica">Dá para mover depois arrastando o cliente entre as colunas.</p>
+      </div>
+      <div class="campo">
+        <label for="valorNegociado">Valor negociado</label>
+        <input type="number" step="0.01" name="valorNegociado" id="valorNegociado" value="0">
+        <p class="dica">Preenchido com o preço de tabela ao escolher a moto; ajuste se houver desconto.</p>
+      </div>`,
+    acoes: [
+      { texto: 'Cancelar', estilo: 'linha' },
+      {
+        texto: 'Criar negociação',
+        aoClicar: async ({ fundo }) => {
+          const dados = lerCampos(fundo);
+          await api.criar('/api/negociacoes', {
+            clienteId: Number(dados.clienteId),
+            motoId: dados.motoId ? Number(dados.motoId) : null,
+            valorNegociado: Number(dados.valorNegociado) || 0,
+            etapa: dados.etapa,
+          });
+          recado('Negociação criada no funil.');
+          recarregar();
+        },
+      },
+    ],
+  });
+
+  // ao escolher a moto, sugere o preco de tabela
+  const seletorMoto = document.querySelector('#motoId');
+  seletorMoto?.addEventListener('change', () => {
+    const opcao = seletorMoto.selectedOptions[0];
+    const campoValor = document.querySelector('#valorNegociado');
+    if (opcao?.dataset.preco) campoValor.value = opcao.dataset.preco;
+  });
+}
+
+// =====================================================================
+//  CLIENTES
+// =====================================================================
+async function montarClientes(area, contexto) {
+  const clientes = await api.ler('/api/clientes');
+  const podeEditar = contexto.permissoes['comercial.escrever'];
+
+  area.innerHTML = `
+    <h1 class="titulo">Clientes</h1>
+    <p class="subtitulo">
+      ${contexto.usuario.perfil === 'dono'
+        ? 'Todos os clientes da loja.'
+        : 'Somente os clientes da sua carteira (RNFR-01.1).'}
+    </p>
+
+    <div class="barra-acoes">
+      ${podeEditar ? '<button class="btn" id="novo-cliente">+ Novo cliente</button>' : ''}
+      <button class="btn linha" id="exportar-clientes">Exportar CSV</button>
+      <input class="filtro" id="busca" placeholder="Buscar por nome, CPF ou telefone…" style="min-width:280px">
+      <span class="espaco"></span>
+      <span style="font-size:12px;color:var(--texto-fraco)">${clientes.length} cliente(s)</span>
+    </div>
+
+    <div class="card tabela" id="lista"></div>`;
+
+  const desenhar = (lista) => {
+    document.getElementById('lista').innerHTML = tabela({
+      colunas: [
+        { titulo: 'Nome', valor: (l) => escapar(l.nome) },
+        { titulo: 'CPF', valor: (l) => escapar(l.cpf) },
+        { titulo: 'Telefone', valor: (l) => escapar(l.telefone) },
+        { titulo: 'Cidade', valor: (l) => escapar(l.cidade || '—') },
+        { titulo: 'Origem', valor: (l) => `<span class="tag t-neutro">${escapar(l.origem || '—')}</span>` },
+        { titulo: 'Vendedor', valor: (l) => escapar(l.vendedor_nome || '—') },
+        { titulo: 'Negociações', alinha: 'direita', valor: (l) => numero(l.negociacoes) },
+        { titulo: 'Compras', alinha: 'direita', valor: (l) => numero(l.compras) },
+        {
+          titulo: '',
+          valor: (l) => podeEditar
+            ? `<button class="btn linha pequeno" data-editar="${l.id}">Editar</button>`
+            : '',
+        },
+      ],
+      linhas: lista,
+      vazio: 'Nenhum cliente encontrado.',
+    });
+
+    for (const botao of document.querySelectorAll('[data-editar]')) {
+      const cliente = clientes.find((c) => String(c.id) === botao.dataset.editar);
+      botao.addEventListener('click', () => abrirEdicaoCliente(cliente));
+    }
+  };
+  desenhar(clientes);
+
+  document.getElementById('novo-cliente')?.addEventListener('click', abrirNovoCliente);
+
+  document.getElementById('exportar-clientes')?.addEventListener('click', () => {
+    exportarCsv('clientes-marelo-motos', clientes.map((c) => ({
+      Nome: c.nome, CPF: c.cpf, Telefone: c.telefone, Email: c.email || '',
+      Cidade: c.cidade || '', Origem: c.origem || '', Vendedor: c.vendedor_nome || '',
+      Negociacoes: c.negociacoes, Compras: c.compras,
+    })));
+  });
+  document.getElementById('busca').addEventListener('input', (e) => {
+    const termo = e.target.value.toLowerCase();
+    desenhar(clientes.filter((c) =>
+      c.nome.toLowerCase().includes(termo) ||
+      c.cpf.includes(termo) ||
+      (c.telefone || '').includes(termo)));
+  });
+}
+
+function abrirNovoCliente() {
+  janela({
+    titulo: 'Novo cliente',
+    descricao: 'O CPF é conferido pelo sistema; o telefone é obrigatório (RNFR-01.2).',
+    corpo: `
+      <div class="campo">
+        <label for="nome">Nome completo</label>
+        <input name="nome" id="nome" placeholder="Ex.: Maria Aparecida da Silva">
+      </div>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="cpf">CPF</label>
+          <input name="cpf" id="cpf" placeholder="000.000.000-00" inputmode="numeric">
+        </div>
+        <div class="campo">
+          <label for="telefone">Telefone com DDD</label>
+          <input name="telefone" id="telefone" placeholder="(15) 99999-0000" inputmode="tel">
+        </div>
+      </div>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="cidade">Cidade</label>
+          <input name="cidade" id="cidade" value="Itapetininga">
+        </div>
+        <div class="campo">
+          <label for="origem">Como chegou até a loja</label>
+          <select name="origem" id="origem">
+            <option>Loja</option>
+            <option>Instagram</option>
+            <option>Indicacao</option>
+            <option>Site</option>
+            <option>Outro</option>
+          </select>
+        </div>
+      </div>
+      <div class="campo">
+        <label for="email">E-mail (opcional)</label>
+        <input type="email" name="email" id="email">
+      </div>`,
+    acoes: [
+      { texto: 'Cancelar', estilo: 'linha' },
+      {
+        texto: 'Cadastrar cliente',
+        aoClicar: async ({ fundo }) => {
+          await api.criar('/api/clientes', lerCampos(fundo));
+          recado('Cliente cadastrado.');
+          recarregar();
+        },
+      },
+    ],
+  });
+}
+
+// =====================================================================
+//  RF-02 — SAC
+// =====================================================================
+async function montarSac(area, contexto) {
+  const chamados = await api.ler('/api/chamados');
+  const podeEditar = contexto.permissoes['sac.escrever'];
+  const atrasados = chamados.filter((c) => c.situacao_real === 'atrasado').length;
+
+  area.innerHTML = `
+    <h1 class="titulo">SAC — chamados de pós-venda</h1>
+    <p class="subtitulo">
+      Chamados sem movimentação por mais de cinco dias são marcados
+      automaticamente como atrasados (RNFR-02.1).
+    </p>
+
+    ${atrasados ? `<div class="aviso erro">${atrasados} chamado(s) sem movimentação há mais de cinco dias.</div>` : ''}
+
+    <div class="barra-acoes">
+      ${podeEditar ? '<button class="btn" id="novo-chamado">+ Abrir chamado</button>' : ''}
+      <span class="espaco"></span>
+      <span style="font-size:12px;color:var(--texto-fraco)">${chamados.length} chamado(s)</span>
+    </div>
+
+    <div class="card tabela">
+      ${tabela({
+        colunas: [
+          { titulo: 'Nº', valor: (l) => escapar(l.numero) },
+          { titulo: 'Cliente', valor: (l) => escapar(l.cliente_nome) },
+          { titulo: 'Assunto', valor: (l) => escapar(l.assunto) },
+          { titulo: 'Moto', valor: (l) => escapar(l.moto_codigo || '—') },
+          { titulo: 'Abertura', valor: (l) => data(l.data_abertura) },
+          { titulo: 'Última movimentação', valor: (l) => data(l.ultima_movimentacao) },
+          { titulo: 'Responsável', valor: (l) => escapar(l.responsavel_nome || '—') },
+          { titulo: 'Situação', valor: (l) => etiqueta(l.situacao_real) },
+          {
+            titulo: '',
+            valor: (l) => (podeEditar && l.situacao !== 'resolvido'
+              ? `<button class="btn pequeno linha" data-resolver="${l.id}">Resolver</button>`
+              : ''),
+          },
+        ],
+        linhas: chamados.map((c) => ({ ...c, __destaque: c.situacao_real === 'atrasado' })),
+        vazio: 'Nenhum chamado aberto.',
+      })}
+    </div>`;
+
+  document.getElementById('novo-chamado')?.addEventListener('click', abrirNovoChamado);
+
+  for (const botao of area.querySelectorAll('[data-resolver]')) {
+    botao.addEventListener('click', async () => {
+      if (!await confirmar('Marcar este chamado como resolvido?')) return;
+      await api.alterar(`/api/chamados/${botao.dataset.resolver}`, { situacao: 'resolvido' });
+      recado('Chamado resolvido.');
+      recarregar();
+    });
+  }
+}
+
+async function abrirNovoChamado() {
+  const listas = await api.ler('/api/apoio/listas');
+
+  janela({
+    titulo: 'Abrir chamado de pós-venda',
+    descricao: 'A abertura é concluída nesta única tela (RNFR-02.3).',
+    corpo: `
+      <div class="campo">
+        <label for="clienteId">Cliente</label>
+        <select name="clienteId" id="clienteId">
+          ${listas.clientes.map((c) => `<option value="${c.id}">${escapar(c.nome)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="assunto">Assunto</label>
+        <select name="assunto" id="assunto">
+          <option>Emplacamento atrasado</option>
+          <option>Revisão de garantia</option>
+          <option>Segunda via do contrato</option>
+          <option>Dúvida sobre parcelas</option>
+          <option>Problema mecânico</option>
+          <option>Transferência de titularidade</option>
+          <option>Outro</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="responsavelId">Responsável</label>
+        <select name="responsavelId" id="responsavelId">
+          ${listas.funcionarios.map((f) => `<option value="${f.id}">${escapar(f.nome)} (${escapar(f.setor)})</option>`).join('')}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="descricao">Descrição</label>
+        <textarea name="descricao" id="descricao" rows="3" placeholder="O que o cliente relatou"></textarea>
+      </div>`,
+    acoes: [
+      { texto: 'Cancelar', estilo: 'linha' },
+      {
+        texto: 'Abrir chamado',
+        aoClicar: async ({ fundo }) => {
+          const dados = lerCampos(fundo);
+          await api.criar('/api/chamados', {
+            clienteId: Number(dados.clienteId),
+            assunto: dados.assunto,
+            descricao: dados.descricao,
+            responsavelId: Number(dados.responsavelId),
+          });
+          recado('Chamado aberto.');
+          recarregar();
+        },
+      },
+    ],
+  });
+}
+
+// Edicao do cadastro (RF-01). A rota PUT ja existia no servidor; faltava
+// o caminho pela tela — o Estoque ja tinha "Editar" e Clientes nao.
+function abrirEdicaoCliente(cliente) {
+  const selecionado = (valor) => (cliente.origem === valor ? ' selected' : '');
+  janela({
+    titulo: `Editar ${cliente.nome}`,
+    descricao: 'O CPF não muda: ele identifica o cliente nos contratos já emitidos.',
+    corpo: `
+      <div class="campo">
+        <label for="e-nome">Nome completo</label>
+        <input name="nome" id="e-nome" value="${escapar(cliente.nome)}">
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="e-cpf">CPF</label>
+          <input id="e-cpf" value="${escapar(cliente.cpf)}" disabled>
+          <p class="dica">Para corrigir o CPF, procure o proprietário.</p>
+        </div>
+        <div class="campo">
+          <label for="e-telefone">Telefone com DDD</label>
+          <input name="telefone" id="e-telefone" value="${escapar(cliente.telefone)}" inputmode="tel">
+        </div>
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="e-cidade">Cidade</label>
+          <input name="cidade" id="e-cidade" value="${escapar(cliente.cidade || '')}">
+        </div>
+        <div class="campo">
+          <label for="e-origem">Como chegou até a loja</label>
+          <select name="origem" id="e-origem">
+            <option${selecionado('Loja')}>Loja</option>
+            <option${selecionado('Instagram')}>Instagram</option>
+            <option${selecionado('Indicacao')}>Indicacao</option>
+            <option${selecionado('Site')}>Site</option>
+            <option${selecionado('Outro')}>Outro</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="campo">
+        <label for="e-email">E-mail</label>
+        <input type="email" name="email" id="e-email" value="${escapar(cliente.email || '')}">
+      </div>
+
+      <div class="campo">
+        <label for="e-observacao">Observação</label>
+        <input name="observacao" id="e-observacao" value="${escapar(cliente.observacao || '')}">
+      </div>`,
+    acoes: [
+      { texto: 'Cancelar', estilo: 'linha' },
+      {
+        texto: 'Salvar alterações',
+        aoClicar: async ({ fundo }) => {
+          await api.alterar(`/api/clientes/${cliente.id}`, lerCampos(fundo));
+          recado('Cadastro atualizado.');
+          recarregar();
+        },
+      },
+    ],
+  });
+}
