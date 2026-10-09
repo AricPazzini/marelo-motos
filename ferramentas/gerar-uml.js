@@ -2,7 +2,7 @@
 //  Gera os diagramas UML da Documentacao de Sistema (Engenharia de
 //  Software II) a partir do sistema real.
 //
-//  Sao sete figuras, todas derivadas do codigo que esta no repositorio:
+//  Sao treze figuras, todas derivadas do codigo que esta no repositorio:
 //    1. classes            <- banco/schema.sql
 //    2. atividade venda    <- servidor/regras.js  (fecharVenda)
 //    3. atividade cobranca <- servidor/regras.js  (reguaDeCobranca)
@@ -31,150 +31,410 @@ const DESTINO = process.argv[2] || join(RAIZ, 'docs', 'uml');
 const CLASSES = `classDiagram
   direction LR
 
-  class Usuario {
-    +int id
-    +String email
-    +String senhaHash
-    +String perfil
-    +boolean ativo
-    +autenticar()
-    +temPermissao(acao)
-  }
-  class LogAcesso {
-    +int id
-    +String email
-    +boolean sucesso
-    +Date momento
-  }
-  class Funcionario {
-    +int id
-    +String nome
-    +String cpf
-    +String cargo
-    +String setor
-    +Date dataAdmissao
-    +Date dataDesligamento
-    +double salario
-    +double percentualComissao
-    +int metaMensal
-    +String situacao
-    +calcularComissao(competencia)
-    +desligar(data)
-  }
-  class Ferias {
-    +int id
-    +Date dataInicio
-    +Date dataFim
-    +String situacao
+  class Pessoa {
+    <<abstract>>
+    #int id
+    #String nome
+    #String cpf
+    +validarCpf() boolean
   }
   class Cliente {
-    +int id
-    +String nome
-    +String cpf
-    +String telefone
-    +String email
-    +String origem
-    +validarCpf()
+    -String telefone
+    -String email
+    -String cidade
+    -String origem
+    -Date criadoEm
+    +estaNaCarteiraDe(vendedor) boolean
   }
-  class Negociacao {
-    +int id
-    +String etapa
-    +double valorNegociado
-    +String motivoPerda
-    +Date atualizadoEm
-    +moverEtapa(novaEtapa, responsavel)
+  class Funcionario {
+    -String cargo
+    -String setor
+    -Date dataAdmissao
+    -Date dataDesligamento
+    -double salario
+    -double percentualComissao
+    -int metaMensal
+    -String situacao
+    +calcularComissao(competencia) double
+    +desligar(data) void
   }
-  class NegociacaoHistorico {
-    +int id
-    +String etapaDe
-    +String etapaPara
-    +String responsavel
-    +Date momento
+  class Usuario {
+    -int id
+    -String email
+    -String senhaHash
+    -String perfil
+    -boolean ativo
+    +autenticar(senha) boolean
+    +temPermissao(acao) boolean
   }
-  class Chamado {
-    +int id
-    +String numero
-    +String assunto
-    +Date dataAbertura
-    +Date ultimaMovimentacao
-    +String situacao
-    +estaAtrasado()
+  class LogAcesso {
+    -int id
+    -String email
+    -boolean sucesso
+    -Date momento
+  }
+  class Ferias {
+    -int id
+    -Date dataInicio
+    -Date dataFim
+    -String situacao
+    +diasParaInicio() int
   }
   class Moto {
-    +int id
-    +String codigo
-    +String marca
-    +String modelo
-    +int ano
-    +String placa
-    +String chassi
-    +double custo
-    +double precoVenda
-    +Date dataEntrada
-    +Date dataSaida
-    +String situacao
-    +diasNoPatio()
-    +darBaixa()
+    -int id
+    -String codigo
+    -String marca
+    -String modelo
+    -int ano
+    -String placa
+    -String chassi
+    -double custo
+    -double precoVenda
+    -Date dataEntrada
+    -Date dataSaida
+    -String situacao
+    +diasNoPatio() int
+    +darBaixa() void
+  }
+  class Negociacao {
+    -int id
+    -String etapa
+    -double valorNegociado
+    -String motivoPerda
+    -Date atualizadoEm
+    +moverEtapa(novaEtapa, responsavel) void
+  }
+  class NegociacaoHistorico {
+    -int id
+    -String etapaDe
+    -String etapaPara
+    -String responsavel
+    -Date momento
   }
   class Contrato {
-    +int id
-    +String numero
-    +String formaPagamento
-    +double valorTotal
-    +double valorEntrada
-    +int qtdParcelas
-    +String banco
-    +Date dataEmissao
-    +String situacao
-    +gerarParcelas()
-    +cancelar(usuario)
+    -int id
+    -String numero
+    -String formaPagamento
+    -double valorTotal
+    -double valorEntrada
+    -int qtdParcelas
+    -String banco
+    -Date dataEmissao
+    -String situacao
+    +gerarParcelas() void
+    +cancelar(usuario) void
   }
   class Parcela {
-    +int id
-    +int numero
-    +double valor
-    +Date vencimento
-    +Date dataPagamento
-    +String situacao
-    +situacaoReal()
-    +diasAtraso()
+    -int id
+    -int numero
+    -double valor
+    -Date vencimento
+    -Date dataPagamento
+    -String situacao
+    +situacaoReal() String
+    +diasAtraso() int
   }
   class Cobranca {
-    +int id
-    +String tipo
-    +String canal
-    +Date momento
+    -int id
+    -String tipo
+    -String canal
+    -Date momento
+  }
+  class Chamado {
+    -int id
+    -String numero
+    -String assunto
+    -Date dataAbertura
+    -Date ultimaMovimentacao
+    -String situacao
+    +estaAtrasado() boolean
   }
   class Despesa {
-    +int id
-    +String descricao
-    +String categoria
-    +double valor
-    +Date vencimento
-    +String situacao
+    -int id
+    -String descricao
+    -String categoria
+    -double valor
+    -Date vencimento
+    -String situacao
   }
   class Parametro {
-    +String chave
-    +String valor
-    +String descricao
+    -String chave
+    -String valor
+    -String descricao
+  }
+
+  Pessoa <|-- Cliente : especializa
+  Pessoa <|-- Funcionario : especializa
+
+  Funcionario "0..1" -- "0..1" Usuario : acessa por
+  Usuario "1" --> "0..*" LogAcesso : registra
+  Funcionario "1" *-- "0..*" Ferias : programa
+  Funcionario "0..1" --> "0..*" Cliente : atende na carteira
+  Funcionario "1" --> "0..*" Negociacao : conduz
+  Funcionario "1" --> "0..*" Contrato : vende
+
+  Cliente "1" --> "0..*" Negociacao : participa de
+  Cliente "1" --> "0..*" Contrato : assina
+  Cliente "1" --> "0..*" Chamado : abre
+
+  Moto "0..1" --> "0..*" Negociacao : e o interesse de
+  Moto "0..1" --> "0..*" Chamado : motiva
+
+  Negociacao "1" *-- "1..*" NegociacaoHistorico : registra
+  Negociacao "0..1" --> "0..1" Contrato : se torna
+
+  Contrato "0..1" o-- "1" Moto : agrega
+  Contrato "1" *-- "1..*" Parcela : gera
+  Parcela "1" *-- "0..*" Cobranca : aciona`;
+
+// ---------------------------------------------------------------------
+// 1a..1d. RECORTES DO DIAGRAMA DE CLASSES
+//
+//  O modelo inteiro tem quinze classes e, reduzido para caber na folha
+//  A4, fica ilegivel. Entao a visao geral serve de mapa e estes quatro
+//  recortes mostram as mesmas classes em tamanho de leitura, uma area
+//  do sistema por vez. As classes que aparecem so para dar o contexto
+//  da ligacao sao desenhadas apenas com o nome, como a UML permite.
+// ---------------------------------------------------------------------
+const CLASSES_PESSOAS = `classDiagram
+  direction TB
+
+  class Pessoa {
+    <<abstract>>
+    #int id
+    #String nome
+    #String cpf
+    +validarCpf() boolean
+  }
+  class Cliente {
+    -String telefone
+    -String email
+    -String cidade
+    -String origem
+    -Date criadoEm
+    +estaNaCarteiraDe(vendedor) boolean
+  }
+  class Funcionario {
+    -String cargo
+    -String setor
+    -Date dataAdmissao
+    -Date dataDesligamento
+    -double salario
+    -double percentualComissao
+    -int metaMensal
+    -String situacao
+    +calcularComissao(competencia) double
+    +desligar(data) void
+  }
+
+  Pessoa <|-- Cliente
+  Pessoa <|-- Funcionario
+  Funcionario "0..1" --> "0..*" Cliente : atende na carteira`;
+
+const CLASSES_FUNIL = `classDiagram
+  direction TB
+
+  class Cliente
+  class Funcionario
+  class Moto {
+    -int id
+    -String codigo
+    -String marca
+    -String modelo
+    -int ano
+    -String placa
+    -String chassi
+    -double custo
+    -double precoVenda
+    -Date dataEntrada
+    -String situacao
+    +diasNoPatio() int
+    +darBaixa() void
+  }
+  class Negociacao {
+    -int id
+    -String etapa
+    -double valorNegociado
+    -String motivoPerda
+    -Date atualizadoEm
+    +moverEtapa(novaEtapa, responsavel) void
+  }
+  class NegociacaoHistorico {
+    -int id
+    -String etapaDe
+    -String etapaPara
+    -String responsavel
+    -Date momento
+  }
+  class Contrato
+
+  Cliente "1" --> "0..*" Negociacao : participa de
+  Funcionario "1" --> "0..*" Negociacao : conduz
+  Moto "0..1" --> "0..*" Negociacao : e o interesse de
+  Negociacao "1" *-- "1..*" NegociacaoHistorico : registra
+  Negociacao "0..1" --> "0..1" Contrato : se torna`;
+
+const CLASSES_VENDA = `classDiagram
+  direction TB
+
+  class Cliente
+  class Moto
+  class Contrato {
+    -int id
+    -String numero
+    -String formaPagamento
+    -double valorTotal
+    -double valorEntrada
+    -int qtdParcelas
+    -String banco
+    -Date dataEmissao
+    -String situacao
+    +gerarParcelas() void
+    +cancelar(usuario) void
+  }
+  class Parcela {
+    -int id
+    -int numero
+    -double valor
+    -Date vencimento
+    -Date dataPagamento
+    -String situacao
+    +situacaoReal() String
+    +diasAtraso() int
+  }
+  class Cobranca {
+    -int id
+    -String tipo
+    -String canal
+    -Date momento
+  }
+
+  Cliente "1" --> "0..*" Contrato : assina
+  Contrato "0..1" o-- "1" Moto : agrega
+  Contrato "1" *-- "1..*" Parcela : gera
+  Parcela "1" *-- "0..*" Cobranca : aciona`;
+
+const CLASSES_ACESSO = `classDiagram
+  direction TB
+
+  class Funcionario
+  class Usuario {
+    -int id
+    -String email
+    -String senhaHash
+    -String perfil
+    -boolean ativo
+    +autenticar(senha) boolean
+    +temPermissao(acao) boolean
+  }
+  class LogAcesso {
+    -int id
+    -String email
+    -boolean sucesso
+    -Date momento
+  }
+  class Ferias {
+    -int id
+    -Date dataInicio
+    -Date dataFim
+    -String situacao
+    +diasParaInicio() int
   }
 
   Funcionario "0..1" -- "0..1" Usuario : acessa por
   Usuario "1" --> "0..*" LogAcesso : registra
-  Funcionario "1" --> "0..*" Ferias : programa
-  Funcionario "0..1" --> "0..*" Cliente : atende na carteira
-  Funcionario "1" --> "0..*" Negociacao : conduz
-  Funcionario "1" --> "0..*" Contrato : vende
-  Cliente "1" --> "0..*" Negociacao : participa de
-  Cliente "1" --> "0..*" Contrato : assina
+  Funcionario "1" *-- "0..*" Ferias : programa`;
+
+const CLASSES_APOIO = `classDiagram
+  direction TB
+
+  class Cliente
+  class Moto
+  class Chamado {
+    -int id
+    -String numero
+    -String assunto
+    -Date dataAbertura
+    -Date ultimaMovimentacao
+    -String situacao
+    +estaAtrasado() boolean
+  }
+  class Despesa {
+    -int id
+    -String descricao
+    -String categoria
+    -double valor
+    -Date vencimento
+    -String situacao
+  }
+  class Parametro {
+    -String chave
+    -String valor
+    -String descricao
+  }
+
   Cliente "1" --> "0..*" Chamado : abre
-  Moto "0..1" --> "0..*" Negociacao : e o interesse de
-  Moto "1" --> "0..1" Contrato : e vendida em
-  Moto "0..1" --> "0..*" Chamado : motiva
-  Negociacao "1" --> "1..*" NegociacaoHistorico : registra
-  Negociacao "0..1" --> "0..1" Contrato : se torna
-  Contrato "1" *-- "1..*" Parcela : gera
-  Parcela "1" --> "0..*" Cobranca : aciona`;
+  Moto "0..1" --> "0..*" Chamado : motiva`;
+
+// ---------------------------------------------------------------------
+// 1d. CLASSE ASSOCIATIVA  (desenho proprio: o mermaid nao tem a notacao)
+//
+//  Cliente e Moto se relacionam muitos-para-muitos: um cliente se
+//  interessa por varias motos e a mesma moto interessa a varios
+//  clientes. O que precisa ser guardado dessa relacao (a etapa do
+//  funil, o valor negociado, o motivo da perda) nao cabe em nenhuma
+//  das duas, entao vira a classe associativa Negociacao.
+// ---------------------------------------------------------------------
+const CLASSE_ASSOCIATIVA = `<svg width="940" height="470" viewBox="0 0 940 470"
+     xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, system-ui, sans-serif">
+  <defs>
+    <style>
+      .cx   { fill:#FFF4D6; stroke:#B98708; stroke-width:1.6; }
+      .ti   { font-size:21px; font-weight:600; fill:#24221D; text-anchor:middle; }
+      .at   { font-size:18px; fill:#24221D; }
+      .li   { stroke:#5C574C; stroke-width:1.6; fill:none; }
+      .tr   { stroke:#5C574C; stroke-width:1.6; fill:none; stroke-dasharray:7 5; }
+      .mu   { font-size:17px; fill:#24221D; }
+      .rot  { font-size:18px; font-style:italic; fill:#24221D; text-anchor:middle; }
+    </style>
+  </defs>
+
+  <!-- Cliente -->
+  <rect class="cx" x="40"  y="40" width="250" height="34"/>
+  <rect class="cx" x="40"  y="74" width="250" height="86"/>
+  <text class="ti" x="165" y="63">Cliente</text>
+  <text class="at" x="54"  y="96">-int id</text>
+  <text class="at" x="54"  y="118">-String nome</text>
+  <text class="at" x="54"  y="140">-String telefone</text>
+
+  <!-- Moto -->
+  <rect class="cx" x="650" y="40" width="250" height="34"/>
+  <rect class="cx" x="650" y="74" width="250" height="86"/>
+  <text class="ti" x="775" y="63">Moto</text>
+  <text class="at" x="664" y="96">-String codigo</text>
+  <text class="at" x="664" y="118">-String modelo</text>
+  <text class="at" x="664" y="140">-double precoVenda</text>
+
+  <!-- associacao muitos para muitos -->
+  <line class="li" x1="290" y1="100" x2="650" y2="100"/>
+  <text class="mu"  x="300" y="92">0..*</text>
+  <text class="mu"  x="612" y="92">0..*</text>
+  <text class="rot" x="470" y="86">interessa-se por</text>
+
+  <!-- ligacao tracejada ate a classe associativa -->
+  <line class="tr" x1="470" y1="100" x2="470" y2="250"/>
+
+  <!-- Negociacao -->
+  <rect class="cx" x="320" y="250" width="300" height="34"/>
+  <rect class="cx" x="320" y="284" width="300" height="108"/>
+  <rect class="cx" x="320" y="392" width="300" height="44"/>
+  <text class="ti" x="470" y="273">Negociacao</text>
+  <text class="at" x="334" y="306">-String etapa</text>
+  <text class="at" x="334" y="328">-double valorNegociado</text>
+  <text class="at" x="334" y="350">-String motivoPerda</text>
+  <text class="at" x="334" y="372">-Date atualizadoEm</text>
+  <text class="at" x="334" y="420">+moverEtapa(novaEtapa, responsavel)</text>
+</svg>`;
 
 // ---------------------------------------------------------------------
 // 2. ATIVIDADE - FECHAMENTO DA VENDA  (regras.js -> fecharVenda)
@@ -238,28 +498,33 @@ const SEQ_LOGIN = `sequenceDiagram
   autonumber
   actor U as Usuário
   participant T as Tela de login
-  participant S as Servidor (api.js)
-  participant A as Autenticação (auth.js)
-  participant B as Banco de dados
+  participant S as Servidor
+  participant A as Autenticação
+  participant B as Banco
 
-  U->>T: informa e-mail e senha
-  T->>S: POST /api/login
-  S->>A: entrar(email, senha)
-  A->>B: SELECT usuario JOIN funcionario
-  B-->>A: registro do usuário
+  U->>+T: informa e-mail e senha
+  T->>+S: POST /api/login
+  S->>+A: entrar(email, senha)
+  A->>+B: SELECT usuario
+  B-->>-A: registro do usuário
+  A->>A: conferirSenha(senha, hash)
   alt senha confere e usuário ativo
-    A->>A: conferirSenha (scrypt)
-    A->>B: INSERT log_acesso (sucesso)
-    A->>A: gerarToken() e abrir sessão de 8 h
+    A->>+B: INSERT log_acesso (sucesso)
+    B-->>-A: gravado
+    A->>A: gerarToken()
     A-->>S: token, usuário e permissões
-    S-->>T: cookie de sessão (HttpOnly, SameSite)
+    S-->>T: cookie de sessão
     T-->>U: abre o painel do seu perfil
   else senha inválida ou usuário inativo
-    A->>B: INSERT log_acesso (falha)
+    A->>+B: INSERT log_acesso (falha)
+    B-->>-A: gravado
     A-->>S: null
     S-->>T: 401 não autorizado
-    T-->>U: "E-mail ou senha inválidos"
-  end`;
+    T-->>U: e-mail ou senha inválidos
+  end
+  deactivate A
+  deactivate S
+  deactivate T`;
 
 // ---------------------------------------------------------------------
 // 5. SEQUENCIA - REGISTRAR VENDA  (api.js + regras.js)
@@ -268,32 +533,38 @@ const SEQ_VENDA = `sequenceDiagram
   autonumber
   actor V as Vendedor
   participant T as Tela Comercial
-  participant S as Servidor (api.js)
-  participant R as Regras (regras.js)
-  participant B as Banco de dados
+  participant S as Servidor
+  participant R as Regras
+  participant B as Banco
 
-  V->>T: confirma o fechamento da venda
-  T->>S: POST /api/vendas/fechar
-  S->>S: pode(usuário, comercial.escrever)
-  S->>R: fecharVenda(dados, usuário)
-  R->>R: validar forma de pagamento, valor e parcelas
-  R->>B: BEGIN TRANSACTION
-  R->>B: INSERT contrato (número sequencial)
-  R->>B: INSERT parcelas da condição
-  R->>B: UPDATE moto SET situacao = vendida
-  R->>B: UPDATE negociacao SET etapa = fechada
+  V->>+T: confirma o fechamento da venda
+  T->>+S: POST /api/vendas/fechar
+  S->>S: pode(comercial.escrever)
+  S->>+R: fecharVenda(dados, usuário)
+  R->>R: validarCondicao()
+  R->>+B: BEGIN TRANSACTION
+  R->>B: INSERT contrato
+  R->>B: INSERT parcela
+  R->>B: UPDATE moto (vendida)
+  R->>B: UPDATE negociacao (fechada)
   R->>B: INSERT negociacao_historico
   alt todos os passos concluídos
     R->>B: COMMIT
-    R-->>S: número do contrato e parcelas
+    B-->>R: gravado
+    R-->>S: contrato e parcelas
     S-->>T: 200 OK
     T-->>V: exibe o contrato gerado
   else algum passo falhou
     R->>B: ROLLBACK
+    B-->>R: desfeito
     R-->>S: ErroDeRegra
-    S-->>T: 400 com a mensagem da regra
+    S-->>T: 400 + mensagem da regra
     T-->>V: nada foi gravado
-  end`;
+  end
+  deactivate B
+  deactivate R
+  deactivate S
+  deactivate T`;
 
 // ---------------------------------------------------------------------
 // 6. ESTADO - NEGOCIACAO  (coluna negociacao.etapa)
@@ -378,6 +649,7 @@ const pagina = (codigo) => `<!doctype html>
       noteBkgColor: '#FFF4D6', noteBorderColor: '#B98708', noteTextColor: '#24221D',
       actorBkg: '#FFF4D6', actorBorder: '#B98708', actorTextColor: '#24221D',
       signalColor: '#5C574C', signalTextColor: '#24221D',
+      activationBkgColor: '#FFE9B0', activationBorderColor: '#B98708',
       labelBoxBkgColor: '#FFF4D6', labelBoxBorderColor: '#B98708',
       fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '15px',
     },
@@ -387,6 +659,14 @@ const pagina = (codigo) => `<!doctype html>
     flowchart: { useMaxWidth: false, nodeSpacing: 45, rankSpacing: 50, htmlLabels: true },
   });
 </script>`;
+
+const paginaCrua = (svg) => `<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin:0; background:#fff; }
+  #alvo { display:inline-block; padding:28px; }
+</style>
+<div id="alvo">${svg}</div>`;
 
 const NAVEGADORES = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -406,8 +686,14 @@ const browser = await puppeteer.launch({
 console.log('');
 let erros = 0;
 
-for (const [arquivo, codigo, titulo] of [
-  ['uml-01-classes', CLASSES, 'Diagrama de classes'],
+for (const [arquivo, codigo, titulo, cru] of [
+  ['uml-01-classes', CLASSES, 'Diagrama de classes (visao geral)'],
+  ['uml-01a-classes-pessoas', CLASSES_PESSOAS, 'Classes - pessoas (generalizacao)'],
+  ['uml-01b-classes-funil', CLASSES_FUNIL, 'Classes - funil de vendas'],
+  ['uml-01c-classes-venda', CLASSES_VENDA, 'Classes - venda e cobranca'],
+  ['uml-01d-classes-acesso', CLASSES_ACESSO, 'Classes - acesso do usuario'],
+  ['uml-01e-classes-apoio', CLASSES_APOIO, 'Classes - pos-venda e apoio'],
+  ['uml-01f-classe-associativa', CLASSE_ASSOCIATIVA, 'Classe associativa Negociacao', true],
   ['uml-02-atividade-venda', ATIVIDADE_VENDA, 'Atividade - fechamento da venda'],
   ['uml-03-atividade-cobranca', ATIVIDADE_COBRANCA, 'Atividade - regua de cobranca'],
   ['uml-04-sequencia-login', SEQ_LOGIN, 'Sequencia - autenticacao'],
@@ -416,7 +702,7 @@ for (const [arquivo, codigo, titulo] of [
   ['uml-07-estado-parcela', ESTADO_PARCELA, 'Estado - parcela'],
 ]) {
   const temporario = join(tmpdir(), `${arquivo}.html`);
-  writeFileSync(temporario, pagina(codigo), 'utf8');
+  writeFileSync(temporario, cru ? paginaCrua(codigo) : pagina(codigo), 'utf8');
 
   const aba = await browser.newPage();
   let falhou = null;
@@ -425,7 +711,7 @@ for (const [arquivo, codigo, titulo] of [
 
   await aba.goto(`file:///${temporario.replaceAll('\\', '/')}`, { waitUntil: 'networkidle0' });
   try {
-    await aba.waitForSelector('#alvo svg', { timeout: 25000 });
+    await aba.waitForSelector('#alvo svg', { timeout: cru ? 5000 : 25000 });
   } catch {
     console.log(`  FALHOU  ${arquivo}: ${falhou || 'o mermaid nao desenhou'}`);
     erros++;
@@ -442,6 +728,6 @@ for (const [arquivo, codigo, titulo] of [
 
 await browser.close();
 console.log('');
-console.log(erros ? `  ${erros} diagrama(s) falharam.` : `  Sete diagramas salvos em ${DESTINO}`);
+console.log(erros ? `  ${erros} diagrama(s) falharam.` : `  Treze diagramas salvos em ${DESTINO}`);
 console.log('');
 process.exit(erros ? 1 : 0);
